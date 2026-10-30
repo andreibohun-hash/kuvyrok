@@ -1,0 +1,1777 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кувырок</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f2a1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+@font-face{font-family:Nunito;font-weight:200 1000;font-display:swap;src:url('vendor/nunito-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:Nunito;font-weight:200 1000;font-display:swap;src:url('vendor/nunito-cyr.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+/* Палитра — одно место (§9): зелёное сукно, кубики-карты. Canvas и сцена читают цвета через getComputedStyle. Сцена одна
+   и та же в любой теме (это игровое поле); светлая тема меняет только карточки экранов. */
+:root{
+  --bg:#0b1a12; --felt:#1f5e40; --felt-lo:#123b28; --fog:#0e2a1c; --panel:rgba(26,30,24,.95); --ink:#fff7e6; --muted:#d3c9b0;
+  --accent:#ffc35c; --accent-ink:#3a2410; --danger:#ff7a6b; --line:rgba(255,255,255,.14);
+  --card:#fffaf0; --card-red:#cf3a3f; --card-black:#1f2236; --back:#2e4583; --back-line:#f1e2bc; --body:#f1e6cc; --flame:#ff8a2e;
+  --frame-w:430px;
+}
+@media (prefers-color-scheme: light){
+  :root{ --panel:rgba(255,250,238,.96); --ink:#2a2416; --muted:#6c624c; --line:rgba(0,0,0,.12); }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.3 Nunito, system-ui, sans-serif;
+  overflow:hidden;overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#frame{position:relative;width:min(100vw,var(--frame-w));height:100dvh;height:100svh;margin:0 auto;overflow:hidden;
+  background:radial-gradient(120% 80% at 50% 42%, var(--felt) 0%, var(--felt-lo) 60%, var(--fog) 100%);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#game{position:absolute;inset:0;touch-action:none}
+#game canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#ui{pointer-events:none}
+header{position:absolute;left:0;right:0;top:env(safe-area-inset-top);display:flex;align-items:center;gap:8px;padding:8px 10px;pointer-events:none;z-index:3;color:#fff7e6}
+header .title{flex:1;text-align:center;line-height:1.05;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+header .title b{display:block;font-size:17px;font-weight:900;letter-spacing:.2px}
+header .title span{font-size:12px;color:#e9dfc6;font-weight:800}
+.hbtn{pointer-events:auto;width:40px;height:40px;border:0;border-radius:14px;background:rgba(10,20,14,.55);color:#fff7e6;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.hbtn svg{width:22px;height:22px}
+.pill{pointer-events:auto;height:32px;border-radius:16px;background:rgba(10,20,14,.55);display:flex;align-items:center;gap:6px;padding:0 10px 0 6px;font-weight:900;font-size:15px}
+.coin{width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe39a,#f2b233 60%,#c98516);box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+#tip{position:absolute;left:0;right:0;top:calc(58px + env(safe-area-inset-top));text-align:center;font-weight:800;font-size:14px;color:#fff7e6;
+  text-shadow:0 1px 3px rgba(0,0,0,.75);pointer-events:none;z-index:2;padding:0 16px}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#fff7e6;z-index:6;pointer-events:none}
+#loupe{position:absolute;left:0;top:0;z-index:7;pointer-events:none;display:none;flex-direction:column;align-items:center;gap:4px;
+  background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:8px 10px 8px;box-shadow:0 10px 24px rgba(0,0,0,.35)}
+#loupe.on{display:flex}
+#loupe canvas{width:72px;height:101px;display:block}
+#loupe small{font-weight:900;font-size:13px;color:var(--muted)}
+#overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:18px;z-index:5;background:rgba(6,14,9,.5)}
+#overlay.show{display:flex}
+#overlay.sheet{background:rgba(6,14,9,.18);align-items:flex-end;padding-bottom:calc(var(--tray-h,200px) + 8px + env(safe-area-inset-bottom))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:18px 18px 16px;max-width:360px;width:100%;text-align:center;
+  box-shadow:0 18px 40px rgba(0,0,0,.35);animation:pop .2s ease-out;max-height:calc(100% - 8px);overflow:auto} /* стартует с видимого состояния (§9) */
+@keyframes pop{from{transform:scale(.95)}to{transform:scale(1)}}
+.card h2{margin:2px 0 6px;font-size:23px;font-weight:900}
+.card p{color:var(--muted);margin:0 0 14px;font-size:15px}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+button{font:inherit}
+.btn{border:0;border-radius:16px;padding:12px 18px;font-weight:900;font-size:17px;cursor:pointer;color:var(--ink);background:rgba(127,127,127,.2)}
+.btn.primary{background:linear-gradient(#ffd27f,#f4a83c);color:var(--accent-ink);box-shadow:0 3px 0 #b8701f}
+.btn.wide{width:100%}
+.btn.small{font-size:14px;padding:9px 12px}
+.btn[disabled]{opacity:.45}
+.big-cube{width:96px;height:96px;margin:2px auto 10px;display:block}
+.stats{display:flex;justify-content:center;gap:18px;margin:0 0 14px;font-weight:900}
+.stats small{display:block;font-size:12px;color:var(--muted);font-weight:800}
+table.res{width:100%;border-collapse:collapse;font-size:12.5px;margin:0 0 12px}
+table.res th{font-size:10.5px;color:var(--muted);font-weight:800;text-align:center;padding:4px 1px;border-bottom:1px solid var(--line);line-height:1.1}
+table.res td{text-align:center;padding:5px 1px;border-bottom:1px solid var(--line);font-weight:800}
+table.res tr.tot td{border-bottom:0;color:var(--accent)}
+.goal{color:var(--muted);font-size:12px;text-align:left;margin:0 0 12px;line-height:1.35}
+.help li{text-align:left;margin:0 0 8px;color:var(--muted)}
+.help{padding-left:20px;margin:0 0 14px}
+.mode{font-size:13px;color:var(--muted);margin:2px 0 12px;font-weight:800}
+#toast{position:absolute;left:50%;top:calc(86px + env(safe-area-inset-top));transform:translateX(-50%);background:rgba(10,20,14,.9);color:#fff7e6;padding:8px 14px;border-radius:12px;
+  pointer-events:none;opacity:.98;transition:opacity .25s;z-index:4;font-weight:800;white-space:nowrap}
+#toast.hide{opacity:0}
+@media (prefers-reduced-motion: reduce){ .card{animation:none} #toast{transition:none} }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="game"><canvas id="gl"></canvas><canvas id="ui"></canvas></div>
+  <header>
+    <button class="hbtn" id="btn-menu" aria-label="меню"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
+    <div class="title"><b id="hud-title">Кувырок</b><span id="hud-sub">кубик из карт</span></div>
+    <div class="pill"><i class="coin"></i><span id="hud-coins">0</span></div>
+    <button class="hbtn" id="btn-mute" aria-label="звук"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path id="mute-wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/><path id="mute-x" d="M16 9l5 6M21 9l-5 6" style="display:none"/></svg></button>
+  </header>
+  <div id="tip"></div>
+  <div id="loupe"><canvas id="loupe-cv" width="144" height="202"></canvas><small id="loupe-txt"></small></div>
+  <div id="loading">Кубик складывается…</div>
+  <div id="overlay"><div class="card" id="card"></div></div>
+  <div id="toast" class="hide"></div>
+</div>
+<!-- three.js 0.185.1, вендорен файлом (CJS-сборка + шим exports → window.THREE). CDN не используется. -->
+<script>var module = { exports: {} }; var exports = module.exports;</script>
+<script src="vendor/three.cjs"></script>
+<script>window.THREE = module.exports; module = undefined; exports = undefined;</script>
+<script>
+'use strict';
+{ // своя область видимости: three.cjs объявляет глобальные const и функции (log, warn…), имена игры с ними не должны столкнуться
+/* ЯДРО */
+// ---------------------------------------------------------------------------
+// «Кувырок» (Tumble Solitaire) — фил-спайк панели №5 «казуальный TriPeaks», пивот P2 «3D TriPeaks», 30.10.2026.
+// Фигура из кубиков, на каждом одна карта A–K. Открыт кубик, над которым пусто («видит небо»). Ход ±1 к текущей (K↔A):
+// кубик улетает, серия +1. Колода S, верхняя карта лицом вверх. Два платных действия по 1 карте колоды: тап по колоде
+// (новая текущая, серия 0) и кувырок — свайп вверх, передняя грань встаёт наверх, нижняя выходит вперёд, текущая
+// остаётся, серия не рвётся, верх колоды сгорает. Ранги видны только на верхней и передней гранях. Победа — снят
+// последний кубик; поражение — колода пуста и хода нет; при ≤ 3 на поле один раз предлагается «+5».
+// Правило перенесено из сима критика (panel5/sims/critic/P2h1-critic.mjs, флаг axis1, сдача comp: 'iid' — шуз) без
+// изобретений: блок «правило» ниже — его код почти дословно; ядро исполняют игра и sim.mjs/test.mjs (core-load.mjs).
+// CFG.MODE = 'stand4' включает исходное решение панели (подставка + кувырок на любую из 4 сторон, видно всё, кроме низа)
+// — A/B на одних сидах. Карта — id 0..51: ранг id % 13 (0 — туз, 12 — король), масть Math.floor(id / 13) (0 ♠ 1 ♥ 2 ♦ 3 ♣).
+// ---------------------------------------------------------------------------
+const CFG = {
+  // правило (сим критика: флаг axis1, сдача из шуза)
+  MODE: 'axis1',          // 'axis1' — одна ось: перед → верх, видно верх и перед (берём); 'stand4' — подставка + 4 стороны (A/B)
+  COMP: 'iid',            // сдача из шуза: ранги независимые (comp у сима критика)
+  NEAR: 3,                // «+5» предлагается один раз, если на поле ≤ 3 кубиков (nearK у сима)
+  PLUS5_N: 5,             // карт в «+5» (из остатка шуза)
+  GREEDY_W: 0.1,          // вес «открыто» в оценке жадного бота (w у сима)
+  PLAN_N: 24,             // ролаутов планировщика на решение
+  // жест кувырка
+  TUMBLE_PX: 150,         // ход пальца вверх, CSS px, на полный кувырок (90°)
+  TUMBLE_COMMIT: 0.5,     // доля хода, после которой кубик доваливается сам; отпустил раньше — откат
+  FLICK_S: 0.12,          // бросок: к доле хода прибавляется скорость пальца × это время (короткий быстрый свайп тоже кувыркает)
+  FLICK_MS: 220, FLICK_MIN: 0.25,   // и страховка по жесту целиком: свайп короче 220 мс (по меткам событий) и ≥ 25% хода — кувырок
+  FALL_MS: 260,           // довал от точки отпускания до удара (с ускорением, как падение)
+  BACK_MS: 300,           // откат, если не дотянул
+  RUBBER: 0.09,           // резинка запрещённых жестов (вниз, вбок при одной оси, пустая колода), доля 90°
+  YAW_PX: 170,            // ход пальца вбок на поворот подставки 90° (stand4) и масштаб резинки камеры (axis1)
+  LAND_MS: 230,           // удар: просадка и отскок фигуры
+  SHAKE_MS: 280, SHAKE: 0.05,   // тряска камеры при ударе, доля расстояния до цели × 0.01
+  FLIP_MS: 230, FLIP_STAGGER_MS: 45,   // переворот карт новой передней грани (волна слева направо)
+  WAVE_MS: 70,            // волна по новому верху: задержка на ряд от переднего края
+  // рука и камера
+  TAP_SLOP_PX: 10,        // палец сдвинулся дальше — это жест, тапа не будет
+  LOUPE_MS: 600,          // удержание дольше — лупа (отпустил раньше — тап, сколько бы ни держал: урок tap-hold-gap)
+  LOUPE_RING_MS: 180,     // кольцо лупы — только после этого, иначе быстрый тап мигает
+  ASSIST_PX: 22,          // тап мимо, но рядом с центром верха подходящего кубика — засчитать
+  CAM_PITCH_DEG: 54,      // камера над сукном: верх крупнее переда, плоскости не сливаются (при 35° верх сжат до ~0,57; 48° — верх и перед почти равны)
+  FOV: 30,                // узкий угол — меньше перспективы, грани одного размера
+  FACE_MAX_PX: 84,        // грань не крупнее (маленькие фигуры), CSS px; цель — грань ≥ 60, ранг ≥ 35
+  FIT_W: 0.86, FIT_H: 0.9,// доля ширины / свободной высоты под фигуру
+  RAISE: 0.08,            // открытые кубики приподняты, доля ребра
+  CAM_MS: 480,            // доводка камеры после хода и кувырка
+  // поток, монеты
+  FLY_MS: 380, DEAL_MS: 300, BURN_MS: 480, PEEK_MS: 220, STUCK_MS: 700, WIN_MS: 1800, TOAST_MS: 1800,
+  HINT_IDLE_MS: 2200,     // рука-подсказка на 1-м уровне после простоя
+  CHIP_MS: 1700,          // фишка «серия цела» после кувырка
+  COINS_START: 0, COIN_STREAK_FROM: 5, COIN_WIN: 10, COIN_PER_DECK: 1,
+};
+
+// ---------------- правило: перенос сима критика (P2h1-critic.mjs), код почти дословно ----------------
+const V = 13, P = 2 / V;
+const ok = (a, b) => { const d = (b - a + V) % V; return d === 1 || d === V - 1; };
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0; let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32;
+function shuffle(a, R, from = 0){ for (let i = a.length - 1; i > from; i--){ const j = from + Math.floor(R() * (i - from + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]; // 2 = +y = верх на старте; перед — 5 (−z)
+const box = (a, b, c) => { const o = []; for (let x = 0; x < a; x++) for (let y = 0; y < b; y++) for (let z = 0; z < c; z++) o.push([x, y, z]); return o; };
+// слои снизу вверх; в слое строки по z (z = 0 — к игроку, потому что перед — это −z), символы по x — формат cube-levels/shapes.js
+const layers = (L) => { const o = []; L.forEach((rows, y) => rows.forEach((row, z) => { for (let x = 0; x < row.length; x++) if (row[x] === '#' || row[x] === 'X') o.push([x, y, z]); })); return o; };
+
+function cubeGeo(cells, name = ''){
+  const n = cells.length, idx = new Map();
+  cells.forEach((c, i) => idx.set(c.join(','), i));
+  const nb = new Int16Array(n * 6).fill(-1);
+  const ray = [];
+  for (let d = 0; d < 6; d++){
+    const rd = [];
+    for (let i = 0; i < n; i++){
+      const [x, y, z] = cells[i], [dx, dy, dz] = DIRS[d], r = [];
+      for (let k = 1; k < 64; k++){ const j = idx.get((x + dx * k) + ',' + (y + dy * k) + ',' + (z + dz * k)); if (j !== undefined){ r.push(j); if (k === 1) nb[i * 6 + d] = j; } }
+      rd.push(r);
+    }
+    ray.push(rd);
+  }
+  const rayInv = ray.map((_, d) => ray[d ^ 1]); // i ∈ rayInv[d][k] ⇔ k лежит от i в сторону d
+  const blk0 = new Int16Array(6 * n); for (let d = 0; d < 6; d++) for (let i = 0; i < n; i++) blk0[d * n + i] = ray[d][i].length;
+  const area = [0, 1, 2, 3, 4, 5].map(u => ray[u].filter(r => r.length === 0).length);
+  return { kind: 'cube', name, n, nb, rayInv, blk0, area, tumble: true, faceKnown: true, peek: true, up0: 2 };
+}
+
+function newState(g, cfg, seed){
+  const R = rng(seed), n = g.n, S = cfg.S;
+  // состав сдачи: balanced — ровно n+1+S карт поровну; shoe2 — начало шуза из 2+ колод; iid — каждый ранг независимо (шуз)
+  const comp = cfg.comp || 'balanced';
+  let total;
+  if (g.kind === 'classic' && comp === 'balanced') total = 52;
+  else if (comp === 'balanced') total = n + 1 + S;
+  else total = 52 * Math.max(2, Math.ceil((n + 1 + S + 5) / 52));
+  const shoe = [];
+  if (comp === 'iid') for (let i = 0; i < total; i++) shoe.push(Math.floor(R() * V));
+  else { for (let i = 0; i < total; i++) shoe.push(i % V); shuffle(shoe, R); }
+  const s = {
+    g, rank: Int8Array.from(shoe.slice(0, n)), alive: new Uint8Array(n).fill(1), left: n,
+    blk: g.blk0.slice(), known: new Uint8Array(n), up: g.up0, cur: shoe[n],
+    deck: shoe.slice(n + 1, n + 1 + S), dp: 0, rest: shoe.slice(n + 1 + S), streak: 0, peek: cfg.peek ?? g.peek,
+    // критик: axis1 — одна ось кувырка (передняя грань → верх), подставки нет; видно только верх и перед, остальные грани — рубашкой
+    axis1: !!cfg.axis1 && g.kind === 'cube', front: 5,
+  };
+  refreshKnown(s);
+  return s;
+}
+function clone(s){ return { ...s, alive: s.alive.slice(), blk: s.blk.slice(), known: s.known.slice() }; }
+const isOpen = (s, i, u = s.up) => s.alive[i] === 1 && s.blk[u * s.g.n + i] === 0;
+function openList(s, u = s.up){ const n = s.g.n, b = u * n, o = []; for (let i = 0; i < n; i++) if (s.alive[i] === 1 && s.blk[b + i] === 0) o.push(i); return o; }
+function refreshKnown(s){
+  const g = s.g, n = g.n, down = s.up ^ 1, b = s.up * n;
+  for (let i = 0; i < n; i++){
+    if (!s.alive[i] || s.known[i]) continue;
+    if (s.blk[b + i] === 0){ s.known[i] = 1; continue; }
+    if (s.axis1){ if (s.blk[s.front * n + i] === 0) s.known[i] = 1; continue; }
+    if (!g.faceKnown) continue;
+    for (let d = 0; d < 6; d++){ if (d === down) continue; const j = g.nb[i * 6 + d]; if (j < 0 || !s.alive[j]){ s.known[i] = 1; break; } }
+  }
+}
+function removeCell(s, k){
+  const g = s.g, n = g.n;
+  s.alive[k] = 0; s.left--;
+  for (let d = 0; d < 6; d++){ const L = g.rayInv[d][k], b = d * n; for (let q = 0; q < L.length; q++) s.blk[b + L[q]]--; }
+  // что стало видно
+  const b = s.up * n; const L = g.rayInv[s.up][k];
+  for (let q = 0; q < L.length; q++){ const i = L[q]; if (s.alive[i] && s.blk[b + i] === 0) s.known[i] = 1; }
+  if (s.axis1){ const bf = s.front * n, LF = g.rayInv[s.front][k]; for (let q = 0; q < LF.length; q++){ const i = LF[q]; if (s.alive[i] && s.blk[bf + i] === 0) s.known[i] = 1; } }
+  else if (g.faceKnown) for (let d = 0; d < 6; d++){ if (d === s.up) continue; const j = g.nb[k * 6 + d]; if (j >= 0 && s.alive[j]) s.known[j] = 1; }
+}
+// действия: k ≥ 0 — снять кубик; DRAW — колода; T0 − u — кувырок, новый верх u
+const DRAW = -1, T0 = -10;
+const isTumble = a => a <= T0;
+function paidOpts(s){
+  if (s.dp >= s.deck.length) return [];
+  const o = [DRAW];
+  if (s.axis1) o.push(T0 - s.front);
+  else if (s.g.tumble) for (let u = 0; u < 6; u++) if ((u >> 1) !== (s.up >> 1)) o.push(T0 - u);
+  return o;
+}
+function apply(s, a, keepStreak = true){
+  if (a >= 0){ removeCell(s, a); s.cur = s.rank[a]; s.streak++; return; }
+  if (a === DRAW){ s.cur = s.deck[s.dp++]; s.streak = 0; return; }
+  s.dp++;
+  if (s.axis1){ const oldUp = s.up; s.up = T0 - a; s.front = oldUp ^ 1; } // перед → верх, низ → перед
+  else s.up = T0 - a;
+  if (!keepStreak) s.streak = 0; refreshKnown(s);
+}
+
+// оценки жадного
+function matchVal(s, t, i){ return s.known[i] ? (ok(t, s.rank[i]) ? 1 : 0) : P; }
+function greedyPlay(s, open, pl, R, w){
+  const g = s.g, n = g.n, u = s.up, b = u * n;
+  let best = pl[0], bs = -1e9;
+  for (const k of pl){
+    const rk = s.rank[k]; let sc = 0, cnt = 0;
+    for (const i of open) if (i !== k){ cnt++; sc += matchVal(s, rk, i); }
+    const L = g.rayInv[u][k];
+    for (const i of L) if (s.alive[i] && s.blk[b + i] === 1){ cnt++; sc += matchVal(s, rk, i); }
+    sc += w * cnt + R() * 1e-3;
+    if (sc > bs){ bs = sc; best = k; }
+  }
+  return best;
+}
+function paidScore(s, a, w){
+  if (a === DRAW){
+    const open = openList(s); let sc = 0;
+    if (s.peek){ const t = s.deck[s.dp]; for (const i of open) sc += matchVal(s, t, i); } else sc = P * open.length;
+    return sc + w * open.length;
+  }
+  const u = T0 - a, open = openList(s, u); let sc = 0;
+  for (const i of open) sc += matchVal(s, s.cur, i);
+  return sc + w * open.length;
+}
+function greedyPaid(s, opts, R, w){
+  let best = opts[0], bs = -1e9;
+  for (const a of opts){ const sc = paidScore(s, a, w) + R() * 1e-3; if (sc > bs){ bs = sc; best = a; } }
+  return best;
+}
+
+// планировщик: ролауты с детерминизацией закрытых кубиков и колоды (кроме видимой верхней)
+function determinize(s, R, iid = false){
+  const g = s.g, n = g.n, t = clone(s);
+  const keep = s.peek ? 1 : 0, hid = [];
+  const pool = [];
+  for (let i = 0; i < n; i++) if (s.alive[i] && !s.known[i]){ hid.push(i); pool.push(s.rank[i]); }
+  const d0 = s.dp + keep;
+  for (let q = d0; q < s.deck.length; q++) pool.push(s.deck[q]);
+  for (const v of s.rest) pool.push(v);
+  shuffle(pool, R);
+  if (iid) for (let q = 0; q < pool.length; q++) pool[q] = Math.floor(R() * V);
+  const rank = Int8Array.from(s.rank); let p = 0;
+  for (const i of hid) rank[i] = pool[p++];
+  const deck = s.deck.slice(); for (let q = d0; q < deck.length; q++) deck[q] = pool[p++];
+  t.rank = rank; t.deck = deck;
+  return t;
+}
+function rollout(t, R, cfg){
+  const w = cfg.w ?? 0.1;
+  for (let guard = 0; guard < 400; guard++){
+    if (t.left === 0) return 1 + 0.01 * (t.deck.length - t.dp);
+    const open = openList(t); const pl = open.filter(i => ok(t.cur, t.rank[i]));
+    if (pl.length){ apply(t, greedyPlay(t, open, pl, R, w)); continue; }
+    const po = paidOpts(t); if (!po.length) return -0.01 * t.left;
+    apply(t, cfg.noTumble ? DRAW : greedyPaid(t, po, R, w), cfg.keepStreak !== false);
+  }
+  return -0.01 * t.left;
+}
+function planPick(s, pl, R, cfg, any){
+  const po = paidOpts(s);
+  let acts = pl.length ? pl.slice() : [];
+  if (!pl.length || any) acts = acts.concat(cfg.noTumble ? po.filter(a => a === DRAW) : po);
+  if (acts.length === 1) return acts[0];
+  const N = cfg.planN || 24, sc = new Float64Array(acts.length);
+  for (let r = 0; r < N; r++){
+    const base = determinize(s, R, cfg.planIID);
+    for (let q = 0; q < acts.length; q++){ const t = clone(base); apply(t, acts[q], cfg.keepStreak !== false); sc[q] += rollout(t, R, cfg); }
+  }
+  let best = 0; for (let q = 1; q < acts.length; q++) if (sc[q] > sc[best]) best = q;
+  if (any && pl.length && acts[best] < 0){
+    let bp = 0; for (let q = 1; q < pl.length; q++) if (sc[q] > sc[bp]) bp = q;
+    if ((sc[best] - sc[bp]) / N < (cfg.payMargin ?? 0.05)) return acts[bp];
+  }
+  return acts[best];
+}
+
+// боты: random/rdraw «не думая» (rdraw — без кувырка); casual — жадный с 30% случайных; greedy/gdraw — жадный (gdraw без
+// кувырка); naiveT «где ±1 — туда и толкай»; naiveP «простое правило»: верх колоды даёт ход — колода, иначе кувырок на грань
+// с ±1, иначе колода; plan / planAny / planNC — планировщик (с платой при ходе / без счёта карт)
+function decide(s, bot, open, pl, R, cfg){
+  const w = cfg.w ?? 0.1;
+  const po = paidOpts(s);
+  const tumbleOK = s.g.tumble && !cfg.noTumble && bot !== 'rdraw' && bot !== 'gdraw';
+  const paid = tumbleOK ? po : po.filter(a => a === DRAW);
+  if (bot === 'random' || bot === 'rdraw' || (bot === 'casual' && R() < 0.3)){
+    if (pl.length) return pl[Math.floor(R() * pl.length)];
+    return paid[Math.floor(R() * paid.length)];
+  }
+  if (bot === 'greedy' || bot === 'gdraw' || bot === 'casual'){
+    if (pl.length) return greedyPlay(s, open, pl, R, w);
+    return greedyPaid(s, paid, R, w);
+  }
+  if (bot === 'casualM' || bot === 'casualS'){
+    const rnd = R() < 0.3;
+    if (pl.length) return (bot === 'casualM' && rnd) ? pl[Math.floor(R() * pl.length)] : greedyPlay(s, open, pl, R, w);
+    return (bot === 'casualS' && rnd) ? paid[Math.floor(R() * paid.length)] : greedyPaid(s, paid, R, w);
+  }
+  if (bot === 'naiveT' || bot === 'naiveG' || bot === 'naiveP' || bot === 'front1' || bot === 'errT'){
+    if (pl.length) return bot === 'naiveG' ? greedyPlay(s, open, pl, R, w) : pl[Math.floor(R() * pl.length)];
+    const tums = paid.filter(isTumble);
+    const hasM = (u) => openList(s, u).some(i => ok(s.cur, s.rank[i]));
+    if (bot === 'naiveP' && s.peek){ const t = s.deck[s.dp]; if (open.some(i => ok(t, s.rank[i]))) return DRAW; }
+    let cand = bot === 'front1' ? (tums.length ? [tums[Math.floor(R() * tums.length)]] : []) : tums;
+    const good = cand.filter(a => hasM(T0 - a));
+    if (good.length){
+      if (bot === 'errT' && R() < 0.15) return tums[Math.floor(R() * tums.length)];
+      return good[Math.floor(R() * good.length)];
+    }
+    return DRAW;
+  }
+  if (bot === 'plan' || bot === 'planAny') return planPick(s, pl, R, cfg, bot === 'planAny');
+  if (bot === 'planNC') return planPick(s, pl, R, { ...cfg, planIID: true }, false);
+  throw new Error('bot ' + bot);
+}
+
+const ZERO = () => ({ games: 0, win0: 0, win5: 0, loss0: 0, near0: 0, dec: 0, open: 0, play: 0, hasMove: 0, fork: 0, realFork: 0,
+  stuck: 0, rescue: 0, stuckFork: 0, rescueOpts: 0, taps: 0, paid: 0, draws: 0, tumbles: 0, stSum: 0, stCnt: 0, maxSt: 0,
+  union: 0, knownAlive: 0, tumblesAtMove: 0, drawsAtMove: 0, used5: 0, left0Sum: 0 });
+
+// партия бота (метрики — как у сима критика); mk(g, cfg, seed) — своя раздача (по умолчанию newState: уровни игры дают ручную)
+function playGame(g, cfg, bot, seed, M, mk){
+  const s = mk ? mk(g, cfg, seed) : newState(g, cfg, seed), R = rng(seed * 7919 + 13);
+  const near = cfg.nearK ?? 3, keepStreak = cfg.keepStreak !== false;
+  let extra = 1, used = false, streak = 0, best = 0, best0 = 0;
+  const endStreak = () => { if (streak){ if (!used){ M.stSum += streak; M.stCnt++; } streak = 0; } };
+  M.games++;
+  for (let guard = 0; guard < 2000; guard++){
+    if (s.left === 0){ endStreak(); if (!used) M.win0++; M.win5++; break; }
+    const open = openList(s); const pl = open.filter(i => ok(s.cur, s.rank[i]));
+    if (!pl.length && s.dp >= s.deck.length){
+      if (!used){ M.loss0++; M.left0Sum += s.left; if (s.left <= 3) M.near0++; }
+      if (extra > 0 && s.left <= near){
+        extra--; used = true; M.used5++; best0 = best;
+        let add = s.rest.splice(0, 5); while (add.length < 5) add.push(Math.floor(R() * V));
+        s.deck = s.deck.concat(add); continue;
+      }
+      endStreak(); break;
+    }
+    if (!used){
+      M.dec++; M.open += open.length; M.play += pl.length; if (pl.length) M.hasMove++;
+      if (pl.length >= 2){ M.fork++; if (new Set(pl.map(i => s.rank[i])).size >= 2) M.realFork++; }
+      if (g.kind === 'cube'){
+        let un = 0, kn = 0; const n = g.n;
+        for (let i = 0; i < n; i++) if (s.alive[i]){ if (s.known[i]) kn++; for (let u = 0; u < 6; u++) if (s.blk[u * n + i] === 0){ un++; break; } }
+        M.union += un; M.knownAlive += kn;
+      } else { M.union += open.length; M.knownAlive += open.length; }
+      if (!pl.length){
+        M.stuck++;
+        let good = 0;
+        for (const a of paidOpts(s)){
+          if (bot === 'rdraw' || bot === 'gdraw' || cfg.noTumble){ if (isTumble(a)) continue; }
+          let m = 0;
+          if (a === DRAW){ const t = s.deck[s.dp]; for (const i of open) if (ok(t, s.rank[i])){ m = 1; break; } }
+          else { for (const i of openList(s, T0 - a)) if (ok(s.cur, s.rank[i])){ m = 1; break; } }
+          good += m;
+        }
+        if (good) M.rescue++; if (good >= 2) M.stuckFork++; M.rescueOpts += good;
+      }
+    }
+    const a = decide(s, bot, open, pl, R, cfg);
+    if (a >= 0){ streak++; if (streak > best) best = streak; }
+    else {
+      if (!used){ M.paid++; if (a === DRAW){ M.draws++; if (pl.length) M.drawsAtMove++; } else { M.tumbles++; if (pl.length) M.tumblesAtMove++; } }
+      if (a === DRAW || !keepStreak) endStreak();
+    }
+    if (!used) M.taps++;
+    apply(s, a, keepStreak);
+  }
+  M.maxSt += used ? best0 : best;
+  return M;
+}
+function playBatch(g, cfg, bot, seed0, games, mk){
+  const M = ZERO(); for (let i = 0; i < games; i++) playGame(g, cfg, bot, seed0 + i, M, mk); return M;
+}
+function summary(M){
+  return {
+    win: 100 * M.win0 / M.games, win5: 100 * M.win5 / M.games, near: M.loss0 ? 100 * M.near0 / M.loss0 : 0,
+    open: M.open / M.dec, play: M.play / M.dec, match: 100 * M.play / Math.max(1, M.open), noMove: 100 * (1 - M.hasMove / M.dec),
+    paidShare: 100 * M.paid / M.taps, tumbleShare: M.paid ? 100 * M.tumbles / M.paid : 0, fork: 100 * M.fork / M.dec,
+    realFork: 100 * M.realFork / M.dec, stuckFork: 100 * M.stuckFork / M.dec, rescue: M.stuck ? 100 * M.rescue / M.stuck : 0,
+    rescueOpts: M.stuck ? M.rescueOpts / M.stuck : 0, streak: M.stSum / Math.max(1, M.stCnt), maxSt: M.maxSt / M.games,
+    union: M.union / M.dec, known: M.knownAlive / M.dec, taps: M.taps / M.games, payAtMove: M.paid ? 100 * (M.tumblesAtMove + M.drawsAtMove) / M.paid : 0,
+    leftAtLoss: M.loss0 ? M.left0Sum / M.loss0 : 0,
+  };
+}
+// наименьшая колода, при которой бот выигрывает ≥ target %
+function tuneS(g, cfg, target = 50, bot = 'greedy', games = 2000){
+  for (let S = 1; S <= 3 * g.n + 20; S++){ const r = playBatch(g, { ...cfg, S }, bot, 1, games); if (100 * r.win0 / r.games >= target) return S; }
+  return 3 * g.n + 20;
+}
+
+// ---------------- уровни и раздача игры ----------------
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+function dirIndex(v){ for (let d = 0; d < 6; d++) if (DIRS[d][0] === v[0] && DIRS[d][1] === v[1] && DIRS[d][2] === v[2]) return d; return -1; }
+// фигуры уровней (координаты: x — вбок, y — вверх, z — от игрока; формат layers, как в симе)
+const SHAPES = {
+  'куб 2×2×2': box(2, 2, 2),
+  'плита 3×2×3': box(3, 2, 3),
+  'куб 3×3×3': box(3, 3, 3),
+  'крест': layers([['.#.', '###', '.#.'], ['.#.', '###', '.#.'], ['.#.', '###', '.#.']]),
+  'брусок 2×6×2': box(2, 6, 2),
+  'домик': layers([['###', '###', '###'], ['###', '###', '###'], ['.#.', '.#.', '.#.']]),   // конёк от игрока вглубь: фронтон к камере, за коньком ничего не прячется
+  'ступени': layers([['###', '###', '###'], ['...', '###', '###'], ['...', '...', '###']]),   // поднимаются от игрока: подступёнки с рангами смотрят в камеру
+  'башня 3×4×3': box(3, 4, 3),
+};
+// 1-й уровень — расклад вручную: текущая 5, сверху лежит 6, под ней спереди видна 7; цепочка 5→6→…→K без кувырка и колоды.
+// Индекс кубика box(2,2,2) = x·4 + y·2 + z; на экране x = 1 слева, z = 0 спереди, y = 1 сверху.
+const L1 = {
+  cells: [8, 10, 7, 9, 6, 12, 5, 11],   // верх: перед-лево 6, перед-право 8, зад-лево Q, зад-право 10; под ними 7, 9, K, J
+  cur: 4, deck: [2, 6, 9], rest: [3, 7, 0, 11, 5],
+};
+// колоды (S — одна ось, S4 — подставка) подобрал `node sim.mjs tune`: простой бот (naiveP) выигрывает ≈ 50–55% на шузе;
+// wn / wg / wd — его победы, жадного и «только колода» при этой колоде (базовая линия для итогов теста)
+const LEVELS = [
+  { n: 1, shape: 'куб 2×2×2', name: 'Кубик', manual: L1, S: 3, S4: 3, wn: 100, wg: 100, wd: 100 },
+  { n: 2, shape: 'плита 3×2×3', name: 'Плита', S: 20, S4: 20, seed: 19, lesson: true, wn: 50, wg: 48, wd: 42 },
+  { n: 3, shape: 'куб 3×3×3', name: 'Кубик 27', S: 25, S4: 25, wn: 52, wg: 50, wd: 35 },
+  { n: 4, shape: 'крест', name: 'Крест', S: 20, S4: 19, wn: 52, wg: 52, wd: 32 },
+  { n: 5, shape: 'брусок 2×6×2', name: 'Брусок', S: 24, S4: 23, wn: 52, wg: 50, wd: 6 },
+  { n: 6, shape: 'домик', name: 'Домик', S: 22, S4: 22, wn: 51, wg: 49, wd: 39 },
+  { n: 7, shape: 'ступени', name: 'Ступеньки', S: 21, S4: 20, wn: 53, wg: 52, wd: 39 },
+  { n: 8, shape: 'башня 3×4×3', name: 'Башня', S: 29, S4: 28, wn: 53, wg: 51, wd: 28 },
+];
+const GEO = {};
+function levelGeo(li){ const L = LEVELS[li]; if (!GEO[li]){ const cells = SHAPES[L.shape]; GEO[li] = cubeGeo(cells, L.shape); GEO[li].cells = cells; } return GEO[li]; }
+function levelCfg(li, mode){ const L = LEVELS[li], axis1 = (mode || CFG.MODE) !== 'stand4'; return { S: axis1 ? L.S : (L.S4 || L.S), comp: CFG.COMP, axis1, w: CFG.GREEDY_W, planN: CFG.PLAN_N, nearK: CFG.NEAR }; }
+function dealSeed(li, attempt){ return 1000 * (li + 1) + 7919 * attempt + 17; }
+function manualState(g, cfg, m){
+  const n = g.n, s = {
+    g, rank: Int8Array.from(m.cells), alive: new Uint8Array(n).fill(1), left: n,
+    blk: g.blk0.slice(), known: new Uint8Array(n), up: g.up0, cur: m.cur,
+    deck: m.deck.slice(), dp: 0, rest: m.rest.slice(), streak: 0, peek: cfg.peek ?? g.peek,
+    axis1: !!cfg.axis1 && g.kind === 'cube', front: 5,
+  };
+  refreshKnown(s);
+  return s;
+}
+// раздача уровня li, попытка attempt (0 — первая; у урока свой сид). Масть — из отдельного потока генератора, по месту в шузе:
+// кубики 0..n−1, стартовая n, колода n+1+j («+5» из остатка шуза продолжает колоду — те же места). Ранги — те же вызовы, что у сима.
+function dealLevel(li, attempt, mode){
+  const L = LEVELS[li], g = levelGeo(li), cfg = levelCfg(li, mode);
+  const seed = attempt === 0 && L.seed ? L.seed : dealSeed(li, attempt);
+  const s = L.manual ? manualState(g, cfg, L.manual) : newState(g, cfg, seed);
+  const total = g.n + 1 + s.deck.length + s.rest.length, R = mulberry32(seed * 13 + 5), suit = new Int8Array(total);
+  for (let i = 0; i < total; i++) suit[i] = Math.floor(R() * 4);
+  s.seed = seed; s.li = li; s.suit = suit; s.curSuit = suit[g.n];
+  return s;
+}
+// ручная раздача для playBatch (1-й уровень): тот же расклад на любой сид
+function mkLevel(li){ const L = LEVELS[li]; return L.manual ? (g, cfg) => manualState(g, cfg, L.manual) : null; }
+const suitAt = (s, idx) => (s.suit && s.suit[idx] !== undefined ? s.suit[idx] : idx % 4);
+const cubeId = (s, i) => suitAt(s, i) * 13 + s.rank[i];
+const deckId = (s, j) => suitAt(s, s.g.n + 1 + j) * 13 + s.deck[j];
+const curId = (s) => (s.curSuit ?? 0) * 13 + s.cur;
+function playable(s){ return openList(s).filter(i => ok(s.cur, s.rank[i])); }
+function hasMove(s){ return openList(s).some(i => ok(s.cur, s.rank[i])); }
+function canPay(s){ return s.dp < s.deck.length; }
+function isWin(s){ return s.left === 0; }
+function isStuck(s){ return s.left > 0 && !canPay(s) && !hasMove(s); }
+// есть ли ±1 на грани, которая встанет наверх: одна ось — передняя; подставка — любая из 4 боковых
+function frontMatch(s){
+  if (s.axis1) return openList(s, s.front).some(i => ok(s.cur, s.rank[i]));
+  for (let u = 0; u < 6; u++) if ((u >> 1) !== (s.up >> 1) && openList(s, u).some(i => ok(s.cur, s.rank[i]))) return true;
+  return false;
+}
+// ход игрока: снять открытый кубик ±1 → { ok, why, opened: кубики, открывшиеся этим ходом }
+function playCell(s, k){
+  if (!s.alive[k]) return { ok: false, why: 'gone' };
+  if (!isOpen(s, k)) return { ok: false, why: 'closed' };
+  if (!ok(s.cur, s.rank[k])) return { ok: false, why: 'rank' };
+  const before = openList(s); s.curSuit = suitAt(s, k); apply(s, k);
+  const opened = openList(s).filter(i => !before.includes(i));
+  return { ok: true, opened };
+}
+function drawDeck(s){ if (!canPay(s)) return false; s.curSuit = suitAt(s, s.g.n + 1 + s.dp); apply(s, DRAW); return true; }
+// кувырок от себя: передняя грань встаёт наверх, нижняя выходит вперёд (в axis1 так делает apply; в stand4 — то же
+// для выбранной подставкой передней грани, а сим stand4 выбирает любую из 4 боковых — подставка крутится бесплатно)
+function doTumble(s){ if (!canPay(s)) return false; const oldUp = s.up; apply(s, T0 - s.front, true); if (!s.axis1) s.front = oldUp ^ 1; return true; }
+// подставка (только stand4): dir > 0 — палец вправо, вперёд выходит левая грань; dir < 0 — правая
+function rotateStand(s, dir){ const X = dirIndex(cross3(DIRS[s.up], DIRS[s.front])); s.front = dir > 0 ? X ^ 1 : X; }
+function plus5(s, R){ let add = s.rest.splice(0, CFG.PLUS5_N); while (add.length < CFG.PLUS5_N) add.push(Math.floor(R() * V)); s.deck = s.deck.concat(add); }
+const maxArea = (g) => Math.max(...g.area);
+/* КОНЕЦ ЯДРА */
+
+// ---------------------------------------------------------------------------
+// Оболочка: фигура на three.js (два InstancedMesh: тела кубиков и наклейки-карты из атласа), жест кувырка вслед за
+// пальцем с доводкой, ударом и тряской, камера над сукном, лупа, лоток (серия, призраки ±1, отбой, колода с открытой
+// верхней картой), монеты, звук, экраны, метрики теста. Время абсолютное (§4): дедлайны сравниваются с performance.now().
+// ---------------------------------------------------------------------------
+const NAME = 'kuvyrok';
+const TSTART = performance.now();
+const now = () => performance.now();
+function log(kind, name, info){            // журнал [game] — одна строка на событие (§11)
+  console.log('[game] ' + JSON.stringify({ t: +((now() - TSTART) / 1000).toFixed(3), kind, name, info: info === undefined ? '' : String(info) }));
+}
+const SAVE_KEY = NAME + '.v1';
+function loadSave(){ try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; } }
+function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.save)); } catch (e) {} }
+const $ = (id) => document.getElementById(id);
+const REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+const G = {
+  screen: 'boot',          // boot | menu | game | offer | lost | win | results | help
+  phase: 'idle',           // idle | play | stuck | offer | lost | won
+  li: 0, st: null, attempt: 0,
+  save: Object.assign({ level: 0, coins: CFG.COINS_START, muted: false, metrics: {}, mode: CFG.MODE, tumbled: false }, loadSave()),
+  fx: [], errors: [], paused: false,
+  lv: null,                // метрики текущего уровня (newLevelMetrics)
+  offer: null, plus5Used: false, phaseUntil: 0, lastInput: 0, tipUntil: 0, trayK: 0, firstMoveDone: false,
+};
+const gameMode = () => (G.save.mode === 'stand4' ? 'stand4' : 'axis1');
+
+// ---------------------------------------------------------------------------
+// Звук: WebAudio-синтез без файлов (§8), ленивый старт по первому жесту; голоса «Стога» и «Света в окнах» + кувырок
+// ---------------------------------------------------------------------------
+const Snd = {
+  ac: null, out: null, cache: {},
+  init(){
+    if (this.ac){ if (this.ac.state === 'suspended') this.ac.resume(); return; }
+    try {
+      this.ac = new (window.AudioContext || window.webkitAudioContext)();
+      this.out = this.ac.createGain(); this.out.gain.value = 0.85; this.out.connect(this.ac.destination);
+    } catch (e) { this.ac = null; }
+  },
+  ok(){ return this.ac && !G.save.muted; },
+  pluckBuf(freq){                      // струна: шумовой всплеск в кольцевом буфере, усреднение — затухание
+    const key = Math.round(freq * 10);
+    if (this.cache[key]) return this.cache[key];
+    const sr = this.ac.sampleRate, N = Math.max(2, Math.round(sr / freq)), len = Math.floor(sr * 1.6);
+    const buf = this.ac.createBuffer(1, len, sr), d = buf.getChannelData(0), ring = new Float32Array(N), rnd = mulberry32(key);
+    for (let i = 0; i < N; i++) ring[i] = rnd() * 2 - 1;
+    let p = 0;
+    for (let i = 0; i < len; i++){ const a = ring[p], b = ring[(p + 1) % N]; d[i] = a; ring[p] = (a + b) * 0.5 * 0.9962; p = (p + 1) % N; }
+    return (this.cache[key] = buf);
+  },
+  pluck(freq, vol, at){
+    if (!this.ok()) return;
+    const t = (at || 0) + this.ac.currentTime, src = this.ac.createBufferSource(), g = this.ac.createGain(), f = this.ac.createBiquadFilter();
+    src.buffer = this.pluckBuf(freq); f.type = 'lowpass'; f.frequency.value = 2800;
+    g.gain.value = vol || 0.3; src.connect(f).connect(g).connect(this.out); src.start(t);
+  },
+  bell(freq, vol, dur, at){
+    if (!this.ok()) return;
+    const t = (at || 0) + this.ac.currentTime;
+    [[1, 1], [2.76, 0.35], [5.4, 0.15]].forEach(([m, a]) => {
+      const o = this.ac.createOscillator(), g = this.ac.createGain();
+      o.type = 'sine'; o.frequency.value = freq * m;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime((vol || 0.18) * a, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 1.1) / m ** 0.3);
+      o.connect(g).connect(this.out); o.start(t); o.stop(t + (dur || 1.1) + 0.05);
+    });
+  },
+  burst(o){                            // шумовой всплеск с фильтром, который едет от f0 к f1; at — задержка, с
+    if (!this.ok()) return;
+    const t = this.ac.currentTime + (o.at || 0), sr = this.ac.sampleRate, len = Math.max(1, Math.floor(sr * o.dur));
+    const buf = this.ac.createBuffer(1, len, sr), d = buf.getChannelData(0), rnd = mulberry32(len + 7);
+    for (let i = 0; i < len; i++) d[i] = rnd() * 2 - 1;
+    const src = this.ac.createBufferSource(), f = this.ac.createBiquadFilter(), g = this.ac.createGain();
+    src.buffer = buf; f.type = o.type || 'lowpass'; f.Q.value = o.q || 0.7;
+    f.frequency.setValueAtTime(o.f0, t); f.frequency.exponentialRampToValueAtTime(o.f1 || o.f0, t + o.dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(o.vol, t + (o.att || 0.004)); g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+    src.connect(f).connect(g).connect(this.out); src.start(t); src.stop(t + o.dur + 0.02);
+  },
+  tok(f0, f1, dur, vol, at){           // мягкий тональный «тук»: синус с падением высоты
+    if (!this.ok()) return;
+    const t = this.ac.currentTime + (at || 0), o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.out); o.start(t); o.stop(t + dur + 0.02);
+  },
+  SCALE: [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3, 784.0, 880.0],   // мажорная пентатоника: серия идёт вверх
+  play(streak){ this.burst({ dur: 0.022, vol: 0.16, type: 'highpass', f0: 3200, f1: 2200 }); this.tok(900, 620, 0.05, 0.05);
+    this.pluck(this.SCALE[Math.min(this.SCALE.length - 1, Math.max(0, streak - 1))] * 2, 0.3); log('sound', 'play', 'streak=' + streak); },
+  flip(){ this.burst({ dur: 0.06, vol: 0.05, type: 'bandpass', f0: 5200, f1: 2600, q: 1.2 }); log('sound', 'flip'); },
+  wrong(){ this.tok(240, 170, 0.09, 0.09); log('sound', 'wrong'); },
+  draw(){ this.burst({ dur: 0.13, vol: 0.06, type: 'lowpass', f0: 4200, f1: 700, att: 0.03 }); this.burst({ dur: 0.018, vol: 0.2, type: 'highpass', f0: 2600, f1: 1800, at: 0.11 });
+    this.tok(360, 230, 0.12, 0.13, 0.11); log('sound', 'draw'); },
+  coin(){ this.bell(1568, 0.09, 0.6); this.bell(2093, 0.06, 0.5, 0.06); log('sound', 'coin'); },
+  plus5(){ this.burst({ dur: 0.35, vol: 0.08, type: 'lowpass', f0: 3600, f1: 900, att: 0.05 }); this.bell(1174.7, 0.1, 0.8, 0.3); log('sound', 'plus5'); },
+  win(){ [523.3, 659.3, 784.0, 1046.5].forEach((f, i) => this.pluck(f, 0.26, i * 0.08)); this.bell(1568, 0.12, 1.6, 0.36); this.bell(2093, 0.08, 1.4, 0.5);
+    this.burst({ dur: 0.9, vol: 0.07, type: 'lowpass', f0: 700, f1: 160, att: 0.3, at: 0.6 }); log('sound', 'win'); },
+  lose(){ this.tok(330, 220, 0.25, 0.1); this.tok(247, 165, 0.35, 0.1, 0.18); log('sound', 'lose'); },
+  // кувырок: скрип наклона, щелчок «точки невозврата», шорох довала, тяжёлый удар, стук отката, сгорание карты
+  tilt(){ this.burst({ dur: 0.16, vol: 0.035, type: 'bandpass', f0: 380, f1: 620, q: 3 }); log('sound', 'tilt'); },
+  detent(){ this.tok(1500, 1100, 0.03, 0.07); this.burst({ dur: 0.012, vol: 0.08, type: 'highpass', f0: 3000, f1: 2500 }); log('sound', 'detent'); },
+  fall(){ this.burst({ dur: 0.22, vol: 0.07, type: 'lowpass', f0: 1400, f1: 300, att: 0.12 }); log('sound', 'fall'); },
+  thud(){ this.tok(150, 52, 0.22, 0.34); this.burst({ dur: 0.26, vol: 0.2, type: 'lowpass', f0: 700, f1: 110 });
+    this.burst({ dur: 0.05, vol: 0.06, type: 'bandpass', f0: 2600, f1: 1500, q: 1, at: 0.01 }); log('sound', 'thud'); },
+  back(){ this.tok(310, 210, 0.08, 0.09); this.burst({ dur: 0.05, vol: 0.04, type: 'lowpass', f0: 900, f1: 300 }); log('sound', 'back'); },
+  burn(){ this.burst({ dur: 0.38, vol: 0.06, type: 'bandpass', f0: 900, f1: 3800, q: 0.8, att: 0.06 });
+    for (let i = 0; i < 5; i++) this.burst({ dur: 0.012, vol: 0.05, type: 'highpass', f0: 3500 + i * 300, f1: 2500, at: 0.05 + i * 0.06 }); log('sound', 'burn'); },
+  rubber(){ this.tok(200, 170, 0.06, 0.05); log('sound', 'rubber'); },
+};
+let touched = false;                       // вибрация только после первого касания
+function buzz(ms){ if (!touched) return; try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+
+// ---------------------------------------------------------------------------
+// Рисунки карт — кодом один раз (масти путями, не глифами: ♥♦ на iOS бывают эмодзи). Два атласа: квадратные наклейки
+// граней 256 px (WebGL) и карты 160×224 для лотка, колоды и лупы (2D). Ячейка 52 — рубашка.
+// ---------------------------------------------------------------------------
+const ST_PX = 256, ST_COLS = 8, ST_ATLAS = 2048, CELL_BACK = 52;
+const CELL_W = 160, CELL_H = 224, C_COLS = 12, C_ATLAS = 2048;
+const FONT = 'Nunito, system-ui, -apple-system, Roboto, sans-serif';
+function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+let PAL = null;
+function palette(){ if (!PAL) PAL = { card: css('--card'), red: css('--card-red'), black: css('--card-black'), back: css('--back'), backLine: css('--back-line'),
+  body: css('--body'), felt: css('--felt'), feltLo: css('--felt-lo'), fog: css('--fog'), flame: css('--flame') }; return PAL; }
+function rr(c, x, y, w, h, r){ c.beginPath(); c.roundRect(x, y, w, h, r); }
+// Масть кодом (как в «Стоге» и «Свете в окнах»). x, y — центр, s — размер.
+function drawSuit(c, suit, x, y, s){
+  c.beginPath();
+  if (suit === 1){        // червы
+    c.moveTo(x, y + s * 0.42);
+    c.bezierCurveTo(x - s * 0.9, y - s * 0.15, x - s * 0.42, y - s * 0.75, x, y - s * 0.28);
+    c.bezierCurveTo(x + s * 0.42, y - s * 0.75, x + s * 0.9, y - s * 0.15, x, y + s * 0.42);
+  } else if (suit === 2){ // бубны
+    c.moveTo(x, y - s * 0.55); c.lineTo(x + s * 0.4, y); c.lineTo(x, y + s * 0.55); c.lineTo(x - s * 0.4, y); c.closePath();
+  } else if (suit === 0){ // пики
+    c.moveTo(x, y - s * 0.55);
+    c.bezierCurveTo(x + s * 0.9, y + s * 0.05, x + s * 0.35, y + s * 0.55, x, y + s * 0.16);
+    c.bezierCurveTo(x - s * 0.35, y + s * 0.55, x - s * 0.9, y + s * 0.05, x, y - s * 0.55);
+    c.moveTo(x, y + s * 0.1); c.lineTo(x + s * 0.2, y + s * 0.55); c.lineTo(x - s * 0.2, y + s * 0.55); c.closePath();
+  } else {                // трефы
+    const r = s * 0.24;
+    c.arc(x, y - s * 0.26, r, 0, Math.PI * 2); c.moveTo(x - s * 0.24 + r, y + s * 0.06); c.arc(x - s * 0.24, y + s * 0.06, r, 0, Math.PI * 2);
+    c.moveTo(x + s * 0.24 + r, y + s * 0.06); c.arc(x + s * 0.24, y + s * 0.06, r, 0, Math.PI * 2);
+    c.moveTo(x, y); c.lineTo(x + s * 0.16, y + s * 0.55); c.lineTo(x - s * 0.16, y + s * 0.55); c.closePath();
+  }
+  c.fill();
+}
+// Ранг по центру по горизонтали, сжатый по ширине до maxW; 6 и 9 подчёркнуты (на повёрнутой грани их путают).
+function drawRank(c, txt, cx, base, size, maxW, underline){
+  c.font = '900 ' + size + 'px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  const m = c.measureText(txt).width, k = Math.min(1, maxW / m);
+  c.save(); c.translate(cx, base); c.scale(k, 1); c.fillText(txt, -m / 2, 0); c.restore();
+  if (underline){ const uw = m * k * 0.78; c.fillRect(cx - uw / 2, base + size * 0.07, uw, size * 0.075); }
+}
+// Наклейка грани: квадратная карта, ранг ~0,66 стороны (грань 60 px × наклейка 0,88 → ранг ~35 px), масти в углах.
+function drawFaceSq(c, id, x, y, S){
+  const Pl = palette(), r = id % 13, s = Math.floor(id / 13) % 4, red = s === 1 || s === 2;
+  c.fillStyle = Pl.card; rr(c, x + 8, y + 8, S - 16, S - 16, 34); c.fill();
+  c.lineWidth = 6; c.strokeStyle = 'rgba(40,30,20,.45)'; c.stroke();
+  c.fillStyle = red ? Pl.red : Pl.black;
+  drawRank(c, RANKS[r], x + S / 2, y + S * 0.71, Math.round(S * 0.66), S * 0.78, r === 5 || r === 8);
+  drawSuit(c, s, x + S * 0.17, y + S * 0.18, S * 0.13);
+  drawSuit(c, s, x + S * 0.83, y + S * 0.84, S * 0.13);
+}
+function drawBackSq(c, x, y, S){
+  const Pl = palette();
+  c.fillStyle = Pl.back; rr(c, x + 8, y + 8, S - 16, S - 16, 34); c.fill();
+  c.lineWidth = 6; c.strokeStyle = 'rgba(10,14,40,.7)'; c.stroke();
+  c.save(); rr(c, x + 30, y + 30, S - 60, S - 60, 16); c.clip();
+  c.strokeStyle = Pl.backLine; c.globalAlpha = 0.45; c.lineWidth = 4;
+  for (let k = -S; k < S * 2; k += 28){ c.beginPath(); c.moveTo(x + k, y); c.lineTo(x + k + S, y + S); c.moveTo(x + k + S, y); c.lineTo(x + k, y + S); c.stroke(); }
+  c.restore(); c.globalAlpha = 1;
+  c.strokeStyle = Pl.backLine; c.lineWidth = 7; rr(c, x + 26, y + 26, S - 52, S - 52, 18); c.stroke();
+}
+// Карта для лотка: ранг почти во всю карту, масть мелко внизу (как в «Стоге»).
+function drawFace(c, id, x, y, w, h){
+  const Pl = palette(), r = id % 13, s = Math.floor(id / 13) % 4, red = s === 1 || s === 2;
+  c.fillStyle = Pl.card; rr(c, x + 4, y + 4, w - 8, h - 8, 15); c.fill();
+  c.lineWidth = 4; c.strokeStyle = 'rgba(40,30,20,.55)'; c.stroke();
+  c.fillStyle = red ? Pl.red : Pl.black;
+  drawRank(c, RANKS[r], x + w / 2, y + h * 0.64, Math.round(h * 0.72), w * 0.86, r === 5 || r === 8);
+  drawSuit(c, s, x + w / 2, y + h * 0.84, h * 0.17);
+}
+function drawBack(c, x, y, w, h){
+  const Pl = palette();
+  c.fillStyle = Pl.back; rr(c, x + 4, y + 4, w - 8, h - 8, 15); c.fill();
+  c.lineWidth = 4; c.strokeStyle = 'rgba(10,14,40,.7)'; c.stroke();
+  c.save(); rr(c, x + 16, y + 16, w - 32, h - 32, 8); c.clip();
+  c.strokeStyle = Pl.backLine; c.globalAlpha = 0.5; c.lineWidth = 3;
+  for (let k = -h; k < w + h; k += 22){ c.beginPath(); c.moveTo(x + k, y); c.lineTo(x + k + h, y + h); c.moveTo(x + k + h, y); c.lineTo(x + k, y + h); c.stroke(); }
+  c.restore(); c.globalAlpha = 1;
+  c.strokeStyle = Pl.backLine; c.lineWidth = 5; rr(c, x + 14, y + 14, w - 28, h - 28, 9); c.stroke();
+}
+function buildStickerAtlas(){
+  const cv = document.createElement('canvas'); cv.width = cv.height = ST_ATLAS; const c = cv.getContext('2d');
+  for (let id = 0; id <= CELL_BACK; id++){ const x = (id % ST_COLS) * ST_PX, y = Math.floor(id / ST_COLS) * ST_PX; id === CELL_BACK ? drawBackSq(c, x, y, ST_PX) : drawFaceSq(c, id, x, y, ST_PX); }
+  return cv;
+}
+function buildCardAtlas(){
+  const cv = document.createElement('canvas'); cv.width = cv.height = C_ATLAS; const c = cv.getContext('2d');
+  for (let id = 0; id <= CELL_BACK; id++){ const x = (id % C_COLS) * CELL_W, y = Math.floor(id / C_COLS) * CELL_H; id === CELL_BACK ? drawBack(c, x, y, CELL_W, CELL_H) : drawFace(c, id, x, y, CELL_W, CELL_H); }
+  return cv;
+}
+function drawCell(c, cell, x, y, w, h){ c.drawImage(SC.cards, (cell % C_COLS) * CELL_W, Math.floor(cell / C_COLS) * CELL_H, CELL_W, CELL_H, x, y, w, h); }
+
+// ---------------------------------------------------------------------------
+// Сцена: сукно, тень-пятно, фигура = группа с двумя InstancedMesh (тела и наклейки). Поза покоя считается из ядра
+// (s.up — какая ось кубиков смотрит вверх, s.front — какая к игроку); на экране у наклейки верх ранга «к экрану» (faceUp):
+// у передней грани — вверх, у верхней — от игрока; при кувырке «перед → верх» ориентация сохраняется сама.
+// ---------------------------------------------------------------------------
+const SC = { ok: false, renderer: null, scene: null, camera: null, fig: null, bodies: null, stickers: null, aCell: null, cloth: null, shadow: null,
+  cards: null, cssW: 375, cssH: 700, DPR: 1, rest: null, base: new THREE.Vector3(), lift: null, shakeAt: null, flashAt: null, cellPrev: null, flips: null,
+  landAt: -1e9, shakeT: -1e9, shakeSeed: 1 };
+// мировые направления наклеек: 0 +X, 1 −X, 2 +Y (верх), 3 −Y (низ), 4 +Z (к игроку), 5 −Z
+const WN = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+const WUP = [[0, 1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [0, 1, 0], [0, 1, 0]];   // верх ранга на грани (faceUp)
+const WSHADE = [0.7, 0.7, 1.0, 0.5, 0.78, 0.6];                                     // освещённость наклейки по стороне
+// поза покоя: центры живых кубиков в координатах фигуры (сукно y = 0, центр рамки по x, z = 0) и связь мира с осями кубиков
+function restPose(s){
+  const g = s.g, n = g.n, U = DIRS[s.up], F = DIRS[s.front], X = cross3(U, F);
+  const wdir = [dirIndex(X), dirIndex(X) ^ 1, s.up, s.up ^ 1, s.front, s.front ^ 1];   // мировое направление → ось кубиков
+  const pos = new Float32Array(n * 3); let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (let i = 0; i < n; i++){
+    const c = g.cells[i], x = dot3(c, X), y = dot3(c, U), z = dot3(c, F);
+    pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+    if (!s.alive[i]) continue;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  const ox = (x0 + x1) / 2, oy = y0 - 0.5, oz = (z0 + z1) / 2;
+  for (let i = 0; i < n; i++){ pos[i * 3] -= ox; pos[i * 3 + 1] -= oy; pos[i * 3 + 2] -= oz; }
+  return { pos, wdir, up: s.up, front: s.front };
+}
+function bboxRest(s = G.st, rest = SC.rest){   // рамка живых кубиков в координатах фигуры
+  const p = rest.pos, b = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 };
+  for (let i = 0; i < s.g.n; i++){ if (!s.alive[i]) continue; const x = p[i * 3], y = p[i * 3 + 1], z = p[i * 3 + 2];
+    b.x0 = Math.min(b.x0, x - 0.5); b.x1 = Math.max(b.x1, x + 0.5); b.y0 = Math.min(b.y0, y - 0.5); b.y1 = Math.max(b.y1, y + 0.5); b.z0 = Math.min(b.z0, z - 0.5); b.z1 = Math.max(b.z1, z + 0.5); }
+  return b;
+}
+// Кубик со скруглёнными рёбрами (как в Word Cube): BoxGeometry с сегментами, вершины прижаты к скруглению радиуса r.
+function roundedBox(size, r, seg){
+  const g = new THREE.BoxGeometry(size, size, size, seg, seg, seg), p = g.attributes.position, nrm = g.attributes.normal;
+  const h = size / 2 - r, v = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++){
+    v.fromBufferAttribute(p, i);
+    c.set(Math.max(-h, Math.min(h, v.x)), Math.max(-h, Math.min(h, v.y)), Math.max(-h, Math.min(h, v.z)));
+    d.subVectors(v, c);
+    if (d.lengthSq() > 1e-9){ d.normalize(); p.setXYZ(i, c.x + d.x * r, c.y + d.y * r, c.z + d.z * r); nrm.setXYZ(i, d.x, d.y, d.z); }
+  }
+  p.needsUpdate = true; nrm.needsUpdate = true;
+  return g;
+}
+function feltTexture(){
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256; const c = cv.getContext('2d'), Pl = palette(), rnd = mulberry32(5);
+  c.fillStyle = Pl.felt; c.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++){ c.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,.07)' : 'rgba(255,255,255,.05)'; c.fillRect(rnd() * 256, rnd() * 256, 1 + rnd() * 2, 1 + rnd() * 2); }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(140, 140); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function shadowTexture(){
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
+  const g = c.createRadialGradient(64, 64, 8, 64, 64, 64); g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(0.6, 'rgba(0,0,0,.28)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(cv);
+}
+const MAXN = 45;
+function initScene(){
+  const cv = $('gl'), Pl = palette();
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: false, powerPreference: 'high-performance' });
+  renderer.setClearColor(new THREE.Color(Pl.fog)); renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene(); scene.fog = new THREE.Fog(new THREE.Color(Pl.fog), 18, 46);
+  const camera = new THREE.PerspectiveCamera(CFG.FOV, 1, 0.1, 200);
+  scene.add(new THREE.HemisphereLight(0xfff4dc, 0x1c3a28, 1.25));
+  const sun = new THREE.DirectionalLight(0xfff0d6, 1.5); sun.position.set(-3, 9, 5); scene.add(sun);
+  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshLambertMaterial({ map: feltTexture() }));
+  cloth.rotation.x = -Math.PI / 2; scene.add(cloth);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.004; scene.add(shadow);
+  const fig = new THREE.Group(); fig.matrixAutoUpdate = false; scene.add(fig);
+  // тела кубиков: кремовые, закрытые темнее (instanceColor)
+  const bodies = new THREE.InstancedMesh(roundedBox(0.98, 0.11, 3), new THREE.MeshLambertMaterial({ color: new THREE.Color(Pl.body) }), MAXN);
+  const col = new THREE.Color(1, 1, 1); for (let i = 0; i < MAXN; i++) bodies.setColorAt(i, col);
+  bodies.frustumCulled = false; fig.add(bodies);
+  // наклейки-карты: квадрат из атласа; ячейка атласа — атрибут экземпляра aCell (сдвиг UV), освещённость — instanceColor
+  const tex = new THREE.CanvasTexture(buildStickerAtlas()); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const pg = new THREE.PlaneGeometry(1, 1), aCell = new THREE.InstancedBufferAttribute(new Float32Array(MAXN * 6 * 2), 2); aCell.setUsage(THREE.DynamicDrawUsage);
+  pg.setAttribute('aCell', aCell);
+  const smat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  const k = (ST_PX / ST_ATLAS).toFixed(6);
+  smat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aCell;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = vMapUv * ' + k + ' + aCell;\n#endif');
+  };
+  const stickers = new THREE.InstancedMesh(pg, smat, MAXN * 6);
+  for (let i = 0; i < MAXN * 6; i++) stickers.setColorAt(i, col);
+  stickers.frustumCulled = false; fig.add(stickers);
+  Object.assign(SC, { renderer, scene, camera, cloth, shadow, fig, bodies, stickers, aCell, ok: true });
+  SC.cards = buildCardAtlas();
+}
+// ячейка наклейки: лицо карты на верхней грани, если кубик «видит небо», иначе — на передней, если впереди пусто; остальное —
+// рубашка. Карта кубика рисуется один раз: у открытого переднего ряда лицо только сверху, спереди — рубашка (Андрей 30.10:
+// «сливается верхняя грань и нижняя — три семёрки по центру»: дубль той же карты на передней грани склеивал две плоскости).
+// В stand4 (подставка) — у открытого лицо сверху, у закрытого — на любой открытой боковой грани (faceKnown у сима).
+function stickerCell(s, i, k){
+  const n = s.g.n, top = s.blk[s.up * n + i] === 0;
+  if (top) return k === 2 ? cubeId(s, i) : CELL_BACK;
+  if (s.axis1) return k === 4 && s.blk[s.front * n + i] === 0 ? cubeId(s, i) : CELL_BACK;
+  return k !== 3 && k !== 2 ? cubeId(s, i) : CELL_BACK;
+}
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+const STQ = WN.map((nn, k) => { const u = WUP[k], r = cross3(u, nn), m = new THREE.Matrix4().makeBasis(new THREE.Vector3(...r), new THREE.Vector3(...u), new THREE.Vector3(...nn)); return new THREE.Quaternion().setFromRotationMatrix(m); });
+const easeIO = (t) => t < 0 ? 0 : t > 1 ? 1 : t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const ease = (t) => t < 0 ? 0 : t > 1 ? 1 : 1 - (1 - t) * (1 - t);
+// после кувырка и поворота подставки «прошлые» ячейки наклеек переезжают вместе с гранями: perm[k] — куда ушла сторона k.
+// Так новая передняя (бывшая нижняя, рубашка) переворачивается в лицо, а бывшая передняя наверху — нет.
+function remapPrev(perm){ const n = G.st.g.n, o = SC.cellPrev, a = new Int16Array(n * 6).fill(-1); for (let i = 0; i < n; i++) for (let k = 0; k < 6; k++) a[i * 6 + perm[k]] = o[i * 6 + k]; SC.cellPrev = a; SC.flips.clear(); }
+const PERM_TUMBLE = [0, 1, 5, 4, 2, 3];          // поворот −90° вокруг X: +Y → −Z, −Y → +Z, +Z → +Y, −Z → −Y
+const PERM_STAND = { 1: [5, 4, 2, 3, 0, 1], '-1': [4, 5, 2, 3, 1, 0] };   // подставка: палец вправо — левая грань вперёд
+function resetVisual(){
+  const n = G.st.g.n;
+  SC.lift = new Float32Array(n); SC.rise = new Float32Array(n); SC.shakeAt = new Float64Array(n).fill(-1e9); SC.flashAt = new Float64Array(n).fill(-1e9);
+  SC.cellPrev = new Int16Array(n * 6).fill(-1); SC.flips = new Map();
+  for (let i = 0; i < n; i++) SC.lift[i] = isOpen(G.st, i) ? 1 : 0;
+  riseTargets(); SC.rise.set(SC.riseTo);
+}
+// Подъём открытых: чуть (RAISE), а в «яме» — пока верх не станет виден целиком. Камера под CFG.CAM_PITCH_DEG не видит дно ямы
+// глубиной 1 за более высоким соседом спереди (видно ~10% грани), а открытый кубик обязан быть виден и тапаться: такой кубик
+// выезжает вверх на Δy − tg(угла)·(Δz − 1) — по своему же столбцу, где пусто (открыт = над ним пусто). Правило не меняется.
+// Считается спереди назад: поднятый кубик сам загораживает тех, кто за ним (нашёл стенд касаний), поэтому высота соседа
+// спереди — уже с его подъёмом.
+function riseTargets(){
+  const s = G.st, n = s.g.n, p = SC.rest.pos, t = Math.tan(CFG.CAM_PITCH_DEG * Math.PI / 180);
+  if (!SC.riseTo || SC.riseTo.length !== n) SC.riseTo = new Float32Array(n);
+  const order = []; for (let i = 0; i < n; i++){ SC.riseTo[i] = 0; if (s.alive[i]) order.push(i); }
+  order.sort((a, b) => p[b * 3 + 2] - p[a * 3 + 2]);
+  for (const i of order){
+    if (!isOpen(s, i)) continue;
+    let L = 0; const xi = p[i * 3], yi = p[i * 3 + 1], zi = p[i * 3 + 2];
+    for (const j of order){ const dz = p[j * 3 + 2] - zi; if (dz < 0.5) break; if (Math.abs(p[j * 3] - xi) > 0.5) continue;
+      L = Math.max(L, p[j * 3 + 1] + SC.riseTo[j] - yi - t * (dz - 1) + 0.04); }
+    SC.riseTo[i] = CFG.RAISE + Math.max(0, L);
+  }
+}
+// Экземпляры: тела и наклейки по позе покоя, подъём открытых, дрожь отказа, вспышка волны, переворот новых лиц.
+function updateInstances(t){
+  const s = G.st, g = s.g, n = g.n, R = SC.rest, B = SC.bodies, ST = SC.stickers, A = SC.aCell.array, cpr = ST_ATLAS / ST_PX;
+  let started = [];
+  for (let i = 0; i < MAXN; i++){
+    if (i >= n || !s.alive[i]){ _m.makeScale(0, 0, 0); B.setMatrixAt(i, _m); for (let k = 0; k < 6; k++){ ST.setMatrixAt(i * 6 + k, _m); if (i < n) SC.cellPrev[i * 6 + k] = -1; } continue; }
+    const open = isOpen(s, i);
+    SC.lift[i] += ((open ? 1 : 0) - SC.lift[i]) * (REDUCED ? 1 : 0.2);
+    SC.rise[i] += (SC.riseTo[i] - SC.rise[i]) * (REDUCED ? 1 : 0.18);
+    const sh = (t - SC.shakeAt[i]) / 300, dx = sh > 0 && sh < 1 ? Math.sin(sh * Math.PI * 7) * 0.06 * (1 - sh) : 0;
+    const fl = (t - SC.flashAt[i]) / 420, flash = fl > 0 && fl < 1 ? Math.sin(fl * Math.PI) * 0.45 : 0;
+    const x = R.pos[i * 3] + dx, y = R.pos[i * 3 + 1] + SC.rise[i], z = R.pos[i * 3 + 2];
+    _m.makeTranslation(x, y, z); B.setMatrixAt(i, _m);
+    const lum = (0.56 + 0.44 * SC.lift[i]) + flash; B.setColorAt(i, _c.setRGB(lum, lum, lum * (0.96 + 0.04 * SC.lift[i])));
+    for (let k = 0; k < 6; k++){
+      const idx = i * 6 + k, cd = R.wdir[k], j = g.nb[i * 6 + cd];
+      if (j >= 0 && s.alive[j]){ _m.makeScale(0, 0, 0); ST.setMatrixAt(idx, _m); SC.cellPrev[idx] = -1; continue; }
+      let cell = stickerCell(s, i, k);
+      const prev = SC.cellPrev[idx];
+      if (prev !== cell){
+        if (cell !== CELL_BACK && (prev === CELL_BACK || prev === -1) && k !== 3) started.push({ idx, from: CELL_BACK, to: cell, x });
+        else if (cell === CELL_BACK && prev >= 0 && prev !== CELL_BACK) started.push({ idx, from: prev, to: CELL_BACK, x });   // карта ушла с передней грани наверх
+        SC.cellPrev[idx] = cell;
+      }
+      let sx = 0.88; const f = SC.flips.get(idx);
+      if (f){ const q = (t - f.t0) / CFG.FLIP_MS; if (q >= 1) SC.flips.delete(idx); else if (q < 0) cell = f.from; else { sx *= Math.max(0.04, Math.abs(Math.cos(q * Math.PI))); cell = q < 0.5 ? f.from : f.to; } }
+      const nn = WN[k];
+      _p.set(x + nn[0] * 0.502, y + nn[1] * 0.502, z + nn[2] * 0.502); _s.set(sx, 0.88, 1);
+      _m.compose(_p, STQ[k], _s); ST.setMatrixAt(idx, _m);
+      A[idx * 2] = (cell % ST_COLS) / cpr; A[idx * 2 + 1] = 1 - (Math.floor(cell / ST_COLS) + 1) / cpr;
+      const shade = WSHADE[k] * (0.56 + 0.44 * SC.lift[i]) + flash * 0.5; ST.setColorAt(idx, _c.setRGB(shade, shade, shade));
+    }
+  }
+  if (started.length){                       // новые лица: переворот из рубашки; пачкой (после кувырка) — волной слева направо
+    const batch = started.length > 2, x0 = Math.min(...started.map(o => o.x));
+    for (const o of started) SC.flips.set(o.idx, { from: o.from, to: o.to, t0: t + (batch ? (o.x - x0) * CFG.FLIP_STAGGER_MS * 2 : 0) });
+    if (!G.quietFlip) Snd.flip();
+  }
+  G.quietFlip = false;
+  B.instanceMatrix.needsUpdate = true; ST.instanceMatrix.needsUpdate = true; SC.aCell.needsUpdate = true;
+  if (B.instanceColor) B.instanceColor.needsUpdate = true; if (ST.instanceColor) ST.instanceColor.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------------------
+// Жест: TUM — состояние кувырка. th — доля хода (1 = 90° от себя; отрицательная — резинка «к себе»), yaw — доля поворота
+// подставки (±1 = 90°). Поворот фигуры — вокруг заднего нижнего ребра (кувырок), переднего (резинка), вертикали (подставка).
+// ---------------------------------------------------------------------------
+const TUM = { mode: 'idle', kind: '', th: 0, yaw: 0, vel: 0, a: 0, b: 0, t0: 0, ms: 0, detent: false, auto: false };
+const _fm = new THREE.Matrix4(), _r = new THREE.Matrix4(), _tr = new THREE.Matrix4();
+function figMatrix(t){
+  const m = SC.fig.matrix, b = bboxRest();
+  m.makeTranslation(SC.base.x, 0, SC.base.z);
+  if (TUM.th > 0){ const zb = b.z0; m.multiply(_tr.makeTranslation(0, 0, zb)).multiply(_r.makeRotationX(-TUM.th * Math.PI / 2)).multiply(_tr.makeTranslation(0, 0, -zb)); }
+  else if (TUM.th < 0){ const zf = b.z1; m.multiply(_tr.makeTranslation(0, 0, zf)).multiply(_r.makeRotationX(-TUM.th * Math.PI / 2)).multiply(_tr.makeTranslation(0, 0, -zf)); }
+  if (TUM.yaw) m.multiply(_r.makeRotationY(TUM.yaw * Math.PI / 2));
+  const lq = (t - SC.landAt) / CFG.LAND_MS;
+  if (lq > 0 && lq < 1){ const sq = 1 - 0.05 * Math.sin(lq * Math.PI) * (1 - lq); m.multiply(_r.makeScale(1 + (1 - sq) * 0.5, sq, 1 + (1 - sq) * 0.5)); }
+  SC.fig.matrixWorldNeedsUpdate = true;
+}
+// тень-пятно — под рамкой фигуры в мире (во время кувырка тоже)
+const _bv = new THREE.Vector3();
+function placeShadow(){
+  const b = bboxRest(), m = SC.fig.matrix; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const x of [b.x0, b.x1]) for (const y of [b.y0, b.y1]) for (const z of [b.z0, b.z1]){ _bv.set(x, y, z).applyMatrix4(m); x0 = Math.min(x0, _bv.x); x1 = Math.max(x1, _bv.x); z0 = Math.min(z0, _bv.z); z1 = Math.max(z1, _bv.z); }
+  SC.shadow.position.set((x0 + x1) / 2, 0.004, (z0 + z1) / 2); SC.shadow.scale.set((x1 - x0) * 1.5 + 0.6, (z1 - z0) * 1.5 + 0.6, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Камера: смотрит на фигуру под CFG.CAM_PITCH_DEG; кадр строится по рамке живых кубиков честной проекцией, центр — в
+// свободной области между шапкой и лотком; после хода и кувырка мягко доводится. Рыскания нет (одна ось).
+// ---------------------------------------------------------------------------
+const CAM = { tx: 0, ty: 1, tz: 0, dist: 12 };
+let camTw = null;
+const VW = 400;                          // виртуальная ширина 2D-слоя (§2)
+let scale = 1, H = 700, safeT = 0, safeB = 0;
+const TRAY_H = 196, HEADER_H = 84;
+function trayTop(){ return H - safeB / scale - TRAY_H; }
+const _fitCam = new THREE.PerspectiveCamera(CFG.FOV, 1, 0.1, 200), _fv = new THREE.Vector3();
+function frameFor(s = G.st, rest = SC.rest, base = SC.base){
+  const p = rest.pos, pitch = CFG.CAM_PITCH_DEG * Math.PI / 180, sp = Math.sin(pitch), cp = Math.cos(pitch);
+  const pts = [];
+  const rz = rest === SC.rest && SC.riseTo && SC.riseTo.length === s.g.n ? SC.riseTo : null;   // подъём открытых из «ям» — тоже в кадр
+  for (let i = 0; i < s.g.n; i++){ if (!s.alive[i]) continue; const top = 0.5 + Math.max(CFG.RAISE, rz ? rz[i] : 0); for (const dx of [-0.5, 0.5]) for (const dy of [-0.5, top]) for (const dz of [-0.5, 0.5]) pts.push([base.x + p[i * 3] + dx, p[i * 3 + 1] + dy, base.z + p[i * 3 + 2] + dz]); }
+  const b = bboxRest(s, rest), W = SC.cssW, Hc = SC.cssH, top = (safeT + HEADER_H * scale), bot = trayTop() * scale - 6, cy0 = (top + bot) / 2;
+  const cam = _fitCam; cam.fov = CFG.FOV; cam.aspect = W / Hc; cam.updateProjectionMatrix();
+  const tanH = Math.tan(CFG.FOV * Math.PI / 360);
+  let tx = base.x + (b.x0 + b.x1) / 2, ty = (b.y0 + b.y1) / 2, tz = base.z + (b.z0 + b.z1) / 2, d = 14;
+  const dMin = Hc / (2 * tanH * CFG.FACE_MAX_PX);
+  for (let it = 0; it < 8; it++){
+    cam.position.set(tx, ty + d * sp, tz + d * cp); cam.lookAt(tx, ty, tz); cam.updateMatrixWorld();
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const q of pts){ _fv.set(q[0], q[1], q[2]).project(cam); const X = (_fv.x + 1) / 2 * W, Y = (1 - _fv.y) / 2 * Hc; x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); }
+    const k = Math.max((x1 - x0) / (CFG.FIT_W * W), (y1 - y0) / (CFG.FIT_H * (bot - top)));
+    const wpp = 2 * d * tanH / Hc, ex = (x0 + x1) / 2 - W / 2, ey = (y0 + y1) / 2 - cy0;
+    tx += ex * wpp; ty -= cp * ey * wpp; tz += sp * ey * wpp;
+    d = Math.max(dMin, d * (0.35 + 0.65 * k));
+  }
+  return { tx, ty, tz, dist: d };
+}
+function reframe(ms){ riseTargets(); const f = frameFor(); camTw = { a: { ...CAM }, b: f, t0: now(), ms: ms ?? CFG.CAM_MS }; }
+function placeCamera(t){
+  if (camTw){ const q = Math.min(1, (t - camTw.t0) / camTw.ms), e = easeIO(q); for (const k of ['tx', 'ty', 'tz', 'dist']) CAM[k] = camTw.a[k] + (camTw.b[k] - camTw.a[k]) * e; if (q >= 1) camTw = null; }
+  const pitch = CFG.CAM_PITCH_DEG * Math.PI / 180;
+  // во время кувырка камера идёт за фигурой к кадру после удара и чуть отъезжает на середине хода — фигура не уходит под шапку
+  let C = CAM; if (TUM.kind === 'up' && TUM.th > 0 && TUM.camTo){ const e = easeIO(TUM.th), b = TUM.camTo, bump = 1 + 0.14 * Math.sin(Math.PI * Math.min(1, TUM.th));
+    C = { tx: CAM.tx + (b.tx - CAM.tx) * e, ty: CAM.ty + (b.ty - CAM.ty) * e, tz: CAM.tz + (b.tz - CAM.tz) * e, dist: (CAM.dist + (b.dist - CAM.dist) * e) * bump }; }
+  let ox = 0, oy = 0; const sq = (t - SC.shakeT) / CFG.SHAKE_MS;
+  if (sq > 0 && sq < 1 && !REDUCED){ const a = CFG.SHAKE * CAM.dist * 0.1 * (1 - sq) * (1 - sq), R = mulberry32(SC.shakeSeed + Math.floor(sq * 14)); ox = (R() - 0.5) * a; oy = (R() - 0.5) * a; }
+  SC.camera.position.set(C.tx + ox, C.ty + C.dist * Math.sin(pitch) + oy, C.tz + C.dist * Math.cos(pitch));
+  SC.camera.lookAt(C.tx + ox, C.ty + oy, C.tz);
+  SC.camera.updateMatrixWorld();
+  SC.cloth.position.set(Math.round(C.tx / 4) * 4, 0, Math.round(C.tz / 4) * 4);   // сукно «бесконечное»: шаг кратен узору текстуры
+}
+
+// ---------------------------------------------------------------------------
+// Экран ↔ кубики: луч в координаты фигуры и пересечение с кубиками (свой расчёт: ≤ 45 коробок), проекции граней для 2D
+// ---------------------------------------------------------------------------
+const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2(), _inv = new THREE.Matrix4(), _o = new THREE.Vector3(), _d = new THREE.Vector3();
+function pickCube(px, py){                 // px, py — CSS px от левого верхнего угла канваса → { i, face } или null
+  if (!G.st || !SC.rest) return null;
+  _ndc.set(px / SC.cssW * 2 - 1, -(py / SC.cssH * 2 - 1)); _ray.setFromCamera(_ndc, SC.camera);
+  _inv.copy(SC.fig.matrix).invert(); _o.copy(_ray.ray.origin).applyMatrix4(_inv); _d.copy(_ray.ray.direction).transformDirection(_inv);
+  const s = G.st, p = SC.rest.pos; let best = null, bt = 1e9;
+  for (let i = 0; i < s.g.n; i++){
+    if (!s.alive[i]) continue;
+    const cy = p[i * 3 + 1] + SC.rise[i], c = [p[i * 3], cy, p[i * 3 + 2]], o = [_o.x, _o.y, _o.z], d = [_d.x, _d.y, _d.z];
+    let t0 = -1e9, t1 = 1e9, ax = -1;
+    for (let a = 0; a < 3; a++){
+      const lo = c[a] - 0.5, hi = c[a] + 0.5;
+      if (Math.abs(d[a]) < 1e-9){ if (o[a] < lo || o[a] > hi){ t0 = 1e9; break; } continue; }
+      let ta = (lo - o[a]) / d[a], tb = (hi - o[a]) / d[a]; if (ta > tb){ const q = ta; ta = tb; tb = q; }
+      if (ta > t0){ t0 = ta; ax = a; } t1 = Math.min(t1, tb);
+    }
+    if (t0 <= t1 && t0 > 0 && t0 < bt){ bt = t0; const sgn = -Math.sign(d[ax]); best = { i, face: ax === 0 ? (sgn > 0 ? 0 : 1) : ax === 1 ? (sgn > 0 ? 2 : 3) : (sgn > 0 ? 4 : 5) }; }
+  }
+  return best;
+}
+function toScreen(v){ v.project(SC.camera); return { x: (v.x + 1) / 2 * SC.cssW, y: (1 - v.y) / 2 * SC.cssH, z: v.z }; }
+function faceQuad(i, k){                   // углы наклейки грани k кубика i на экране, CSS px: верх-лево, верх-право, низ-право, низ-лево
+  const p = SC.rest.pos, nn = WN[k], u = WUP[k], r = cross3(u, nn), h = 0.44, y = p[i * 3 + 1] + (SC.rise ? SC.rise[i] : 0);
+  const c = [p[i * 3] + nn[0] * 0.5, y + nn[1] * 0.5, p[i * 3 + 2] + nn[2] * 0.5];
+  return [[-1, 1], [1, 1], [1, -1], [-1, -1]].map(([a, b2]) => toScreen(_bv.set(c[0] + (r[0] * a + u[0] * b2) * h, c[1] + (r[1] * a + u[1] * b2) * h, c[2] + (r[2] * a + u[2] * b2) * h).applyMatrix4(SC.fig.matrix)));
+}
+function faceCenter(i, k){ const Q = faceQuad(i, k); return { x: (Q[0].x + Q[2].x) / 2, y: (Q[0].y + Q[2].y) / 2 }; }
+function cubeVisible(i){                   // центр верха на экране, выше лотка, и луч в эту точку попадает в этот же кубик
+  const c = faceCenter(i, 2); if (c.x < 4 || c.x > SC.cssW - 4 || c.y < (safeT + HEADER_H * scale) || c.y > trayTop() * scale) return false;
+  const h = pickCube(c.x, c.y); return !!h && h.i === i;
+}
+function pickVisibleTarget(cands, isVisible){ for (const i of cands) if (isVisible(i)) return i; return -1; }
+function figPoint(which){                  // экранная точка фигуры: середина передней грани или верха (для стрелки урока)
+  const b = bboxRest(), x = (b.x0 + b.x1) / 2;
+  const v = which === 'front' ? _bv.set(x, (b.y0 + b.y1) / 2, b.z1) : _bv.set(x, b.y1 + CFG.RAISE, (b.z0 + b.z1) / 2);
+  return toScreen(v.applyMatrix4(SC.fig.matrix));
+}
+
+// ---------------------------------------------------------------------------
+// Уровень и ходы
+// ---------------------------------------------------------------------------
+function newLevelMetrics(li){
+  return { level: li + 1, mode: gameMode(), startAt: now(), levelMs: null, attempts: 1, won: false,
+    moves: 0, draws: 0, tumbles: 0, wrong: 0, closed: 0, assist: 0, loupes: 0, maxStreak: 0,
+    swipes: 0, failBack: 0, failEmpty: 0, swipeDown: 0, accidental: 0, fromCube: 0,
+    stuckF: 0, stuckFT: 0, stuckN: 0, stuckNT: 0, drawWithMove: 0, camTry: 0, stand: 0, plus5: [], frames: 0, frameMs: 0, dts: [] };
+}
+function startLevel(li, keepMetrics){
+  li = Math.max(0, Math.min(LEVELS.length - 1, li));
+  const same = keepMetrics && G.lv && G.li === li;
+  G.li = li; if (!same) G.attempt = 0;
+  G.st = dealLevel(li, G.attempt, gameMode()); G.plus5Used = false; G.offer = null; G.fx = []; G.firstMoveDone = false;
+  if (!same) G.lv = newLevelMetrics(li);
+  Object.assign(TUM, { mode: 'idle', kind: '', th: 0, yaw: 0, vel: 0 });
+  SC.base.set(0, 0, 0); SC.rest = restPose(G.st); resetVisual(); G.quietFlip = true;
+  figMatrix(now()); Object.assign(CAM, frameFor()); camTw = null;
+  G.phase = 'play'; G.lastInput = now(); G.trayK = 1;
+  goto('game'); hud();
+  tip(li === 0 ? 'Снимай кубики на 1 больше или меньше: 5 → 6' : li === 1 && !G.save.tumbled ? 'Открыты кубики, над которыми пусто' : '', li <= 1 ? 0 : 0);
+  log('event', 'level.start', 'level=' + (li + 1) + ' shape=' + LEVELS[li].shape + ' n=' + G.st.g.n + ' deck=' + G.st.deck.length + ' attempt=' + G.attempt + ' mode=' + gameMode() + ' seed=' + G.st.seed);
+  checkStuck();
+}
+function busy(){ return TUM.mode !== 'idle'; }
+function playCube(i, how){
+  const s = G.st;
+  if (G.phase !== 'play' || busy()) return false;
+  if (!isOpen(s, i)){ G.lv.closed++; SC.shakeAt[i] = now(); Snd.wrong(); buzz(8); log('input', 'tap.closed', 'cube=' + i); return false; }
+  if (!ok(s.cur, s.rank[i])){ G.lv.wrong++; SC.shakeAt[i] = now(); addFx({ kind: 'deny', quad: faceQuad(i, 2), dur: 300 }); Snd.wrong(); buzz(8); log('input', 'tap.rank', 'card=' + RANKS[s.rank[i]] + ' cur=' + RANKS[s.cur]); return false; }
+  const quad = faceQuad(i, 2), prev = curId(s), id = cubeId(s, i);
+  const res = playCell(s, i);
+  G.lv.moves++; G.lv.maxStreak = Math.max(G.lv.maxStreak, s.streak); G.firstMoveDone = true;
+  addFx({ kind: 'fly', id, quad, prev, dur: CFG.FLY_MS });
+  const t = now(); for (const x of res.opened) SC.flashAt[x] = t + 120;
+  if (s.streak >= CFG.COIN_STREAK_FROM){ const g = curGeo(); coins(1, g.x, g.y - 40, 'серия'); }
+  Snd.play(s.streak); buzz(6);
+  log('input', 'tap.cube', 'card=' + RANKS[s.rank[i]] + ' how=' + how + ' streak=' + s.streak + ' left=' + s.left);
+  hud();
+  if (isWin(s)) winSeq(); else { checkStuck(); reframe(); }
+  if (G.li <= 1 && !G.lessonAt && !G.tipUntil && $('tip').textContent) tip('');   // стартовая подсказка уходит с первым ходом
+  return true;
+}
+// перед платным действием: был ли ход сверху (тогда кувырок — «случайный») и был ли ±1 на грани, что встанет
+function recordPaid(kind){
+  const s = G.st, lv = G.lv;
+  if (hasMove(s)){ if (kind === 'tumble') lv.accidental++; else lv.drawWithMove++; return 'move'; }
+  const f = frontMatch(s);
+  if (f){ lv.stuckF++; if (kind === 'tumble') lv.stuckFT++; } else { lv.stuckN++; if (kind === 'tumble') lv.stuckNT++; }
+  return f ? 'front' : 'none';
+}
+function deckTap(){
+  if (G.phase !== 'play' || busy()) return;
+  const s = G.st;
+  if (!canPay(s)){ Snd.wrong(); log('input', 'deck.empty'); return; }
+  const why = recordPaid('draw'), prev = curId(s), id = deckId(s, s.dp);
+  drawDeck(s); G.lv.draws++;
+  const d = deckGeo(); addFx({ kind: 'deal', id, prev, x0: d.x, y0: d.y, dur: CFG.DEAL_MS });
+  if (canPay(s)) addFx({ kind: 'peek', id: deckId(s, s.dp), dur: CFG.PEEK_MS, t0: now() + 80 });
+  Snd.draw(); buzz(5); log('input', 'deck', 'top=' + RANKS[s.cur] + ' left=' + (s.deck.length - s.dp) + ' why=' + why);
+  hud(); checkStuck();
+}
+function checkStuck(){
+  if (G.phase !== 'play') return;
+  if (isStuck(G.st)){ G.phase = 'stuck'; G.phaseUntil = now() + CFG.STUCK_MS; log('event', 'stuck', 'left=' + G.st.left); }
+}
+// --- кувырок ---
+function startDrag(kind){
+  Object.assign(TUM, { mode: 'drag', kind, th: 0, yaw: 0, vel: 0, detent: false, auto: false, camTo: null });
+  if (kind === 'up'){ TUM.camTo = camAfterTumble(); Snd.tilt(); log('input', 'swipe.start', 'up deck=' + (G.st.deck.length - G.st.dp)); }
+}
+function rubber(x){ return Math.sign(x) * CFG.RUBBER * (1 - Math.exp(-Math.abs(x) * 3)); }
+function dragTo(raw, vel){
+  if (TUM.kind === 'up'){
+    TUM.th = canPay(G.st) ? Math.max(0, Math.min(1, raw)) : Math.max(0, rubber(raw));
+    TUM.vel = vel;
+    const past = TUM.th >= CFG.TUMBLE_COMMIT;
+    if (past !== TUM.detent){ TUM.detent = past; if (past){ Snd.detent(); buzz(6); } }
+  } else if (TUM.kind === 'down') TUM.th = -rubber(raw);
+  else if (TUM.kind === 'yaw'){ TUM.yaw = gameMode() === 'stand4' ? Math.max(-1, Math.min(1, raw)) : rubber(raw); TUM.vel = vel; }
+}
+function animTo(field, b, ms, then){ TUM.mode = 'anim'; TUM.field = field; TUM.a = TUM[field]; TUM.b = b; TUM.t0 = now(); TUM.ms = Math.max(60, ms); TUM.then = then; TUM.curve = b === 0 ? 'back' : 'fall'; }
+function releaseDrag(cancelled, ms){
+  const k = TUM.kind, lv = G.lv;
+  if (k === 'up'){
+    lv.swipes++;
+    if (!canPay(G.st)){ lv.failEmpty++; toast('Колода пуста — кувырок стоит 1 карту'); Snd.rubber(); animTo('th', 0, CFG.BACK_MS * 0.7); log('input', 'swipe.empty'); return; }
+    const proj = TUM.th + (cancelled ? 0 : Math.max(0, TUM.vel) * CFG.FLICK_S), quick = !cancelled && ms < CFG.FLICK_MS && TUM.th >= CFG.FLICK_MIN;
+    if (proj >= CFG.TUMBLE_COMMIT || quick){ commitTumble(proj >= CFG.TUMBLE_COMMIT ? 'swipe' : 'flick'); return; }
+    lv.failBack++; Snd.back(); animTo('th', 0, CFG.BACK_MS * Math.sqrt(Math.max(0.15, TUM.th / CFG.TUMBLE_COMMIT)));
+    log('input', 'swipe.back', 'th=' + TUM.th.toFixed(2) + ' vel=' + TUM.vel.toFixed(2));
+  } else if (k === 'down'){ lv.swipeDown++; Snd.rubber(); animTo('th', 0, CFG.BACK_MS * 0.7); log('input', 'swipe.down'); }
+  else if (k === 'yaw'){
+    if (gameMode() === 'stand4'){
+      const proj = TUM.yaw + (cancelled ? 0 : TUM.vel * CFG.FLICK_S);
+      if (Math.abs(proj) >= 0.5){ const dir = Math.sign(proj); lv.stand++; animTo('yaw', dir, 200 * (1 - Math.abs(TUM.yaw)) + 80, () => landStand(dir)); log('input', 'stand.turn', 'dir=' + dir); }
+      else animTo('yaw', 0, 220);
+    } else { lv.camTry++; Snd.rubber(); animTo('yaw', 0, 260); log('input', 'camera.try', 'yaw=' + TUM.yaw.toFixed(2)); }
+  } else TUM.mode = 'idle';
+}
+function commitTumble(how){
+  const why = recordPaid('tumble');
+  TUM.why = why; TUM.how = how;
+  const rest = 1 - TUM.th; Snd.fall();
+  animTo('th', 1, CFG.FALL_MS * Math.sqrt(Math.max(0.12, rest)) * (how === 'auto' ? 1.6 : 1), landTumble);
+  log('input', 'tumble', 'how=' + how + ' th=' + TUM.th.toFixed(2) + ' vel=' + TUM.vel.toFixed(2) + ' why=' + why);
+}
+// база фигуры после кувырка: поворот −90° вокруг X у заднего нижнего ребра (y 0, z zb): (x, y, z) → (x, z − zb, zb − y);
+// новая поза покоя сдвигается так, чтобы картинка не прыгнула
+function tumbledBase(s, old, nr, zb){
+  let i0 = 0; while (i0 < s.g.n && !s.alive[i0]) i0++;
+  const b = SC.base.clone(); if (i0 >= s.g.n) return b;
+  const x = old.pos[i0 * 3], y = old.pos[i0 * 3 + 1];
+  b.x += x - nr.pos[i0 * 3]; b.z += (zb - y) - nr.pos[i0 * 3 + 2]; return b;
+}
+function camAfterTumble(){                   // кадр, который будет после удара (камера идёт к нему во время жеста)
+  const s = G.st; if (!canPay(s)) return null;
+  const t = clone(s); doTumble(t); const nr = restPose(t);
+  return frameFor(t, nr, tumbledBase(t, SC.rest, nr, bboxRest().z0));
+}
+// удар: ядро делает кувырок, поза покоя пересчитывается
+function landTumble(){
+  const s = G.st, old = SC.rest, zb = bboxRest().z0, burnId = deckId(s, s.dp), streak = s.streak;
+  doTumble(s); G.lv.tumbles++;
+  const nr = restPose(s);
+  SC.base.copy(tumbledBase(s, old, nr, zb));
+  if (TUM.camTo){ Object.assign(CAM, TUM.camTo); camTw = null; TUM.camTo = null; }
+  SC.rest = nr; TUM.th = 0; remapPrev(PERM_TUMBLE);
+  for (let i = 0; i < s.g.n; i++){ SC.lift[i] = 0; SC.rise[i] = 0; }
+  const t = now(), zf = Math.max(...openList(s).map(i => nr.pos[i * 3 + 2]));
+  for (const i of openList(s)) SC.flashAt[i] = t + 60 + (zf - nr.pos[i * 3 + 2]) * CFG.WAVE_MS;   // волна от переднего края
+  SC.landAt = t; SC.shakeT = t; SC.shakeSeed = (SC.shakeSeed * 7 + 3) % 9973;
+  Snd.thud(); buzz(18);
+  const d = deckGeo(); addFx({ kind: 'burn', id: burnId, x: d.x, y: d.y, dur: CFG.BURN_MS }); Snd.burn();
+  if (canPay(s)) addFx({ kind: 'peek', id: deckId(s, s.dp), dur: CFG.PEEK_MS, t0: t + CFG.BURN_MS * 0.6 });
+  const first = !G.save.tumbled;
+  if (streak > 0) addFx({ kind: 'chip', txt: '↻ серия цела · ' + streak, dur: first ? CFG.CHIP_MS * 1.5 : CFG.CHIP_MS });
+  if (first){ G.save.tumbled = true; save(); tip(streak > 0 ? 'Кувырок не рвёт серию — сгорает карта колоды' : 'Кувырок стоит карту колоды, серия не рвётся', 4000); log('event', 'lesson.done', 'tumble'); }
+  log('event', 'tumble.land', 'up=' + s.up + ' front=' + s.front + ' open=' + openList(s).length + ' streak=' + s.streak + ' deck=' + (s.deck.length - s.dp) + ' why=' + TUM.why);
+  TUM.mode = 'idle'; TUM.kind = '';
+  hud(); reframe(); checkStuck();
+}
+function landStand(dir){                    // подставка (stand4): поворот 90° вокруг вертикали через центр рамки, бесплатно
+  const s = G.st, old = SC.rest;
+  rotateStand(s, dir);
+  const nr = restPose(s); let i0 = 0; while (i0 < s.g.n && !s.alive[i0]) i0++;
+  if (i0 < s.g.n){ const x = old.pos[i0 * 3], z = old.pos[i0 * 3 + 2], c = Math.cos(dir * Math.PI / 2), sn = Math.sin(dir * Math.PI / 2);
+    SC.base.x += (x * c + z * sn) - nr.pos[i0 * 3]; SC.base.z += (-x * sn + z * c) - nr.pos[i0 * 3 + 2]; }
+  SC.rest = nr; TUM.yaw = 0; TUM.mode = 'idle'; TUM.kind = ''; remapPrev(PERM_STAND[dir]);
+  log('event', 'stand.land', 'front=' + s.front); reframe();
+}
+function autoTumble(){                      // кувырок кодом (хук, бот): тот же довал, что у свайпа
+  if (G.phase !== 'play' || busy() || !canPay(G.st)) return false;
+  TUM.kind = 'up'; TUM.th = 0; TUM.vel = 0; TUM.camTo = camAfterTumble(); commitTumble('auto'); return true;   // в «свайпы» не идёт: это не жест
+}
+function updateTum(t){
+  if (TUM.mode !== 'anim') return;
+  const q = Math.min(1, (t - TUM.t0) / TUM.ms);
+  let e;
+  if (TUM.curve === 'fall') e = q * q;                                   // падение с ускорением
+  else e = 1 - Math.pow(1 - q, 3) + Math.sin(q * Math.PI) * 0.08 * (1 - q);   // откат с лёгким перехлёстом
+  TUM[TUM.field] = TUM.a + (TUM.b - TUM.a) * e;
+  if (q >= 1){ TUM[TUM.field] = TUM.b; const then = TUM.then; TUM.mode = 'idle'; TUM.then = null; if (then) then(); else TUM.kind = ''; }
+}
+// --- «+5», поражение, победа ---
+function offerPlus5(){
+  G.offer = { left: G.st.left, attempt: G.attempt, taken: null, ms: null, t: now() };
+  G.lv.plus5.push(G.offer); G.phase = 'offer';
+  log('event', 'plus5.offer', 'left=' + G.st.left); goto('offer');
+}
+function takePlus5(){
+  if (G.phase !== 'offer') return;
+  G.plus5Used = true; G.offer.taken = true; G.offer.ms = Math.round(now() - G.offer.t);
+  const s = G.st; plus5(s, mulberry32(s.seed * 31 + 7));
+  Snd.plus5(); log('event', 'plus5.take', 'left=' + s.left);
+  const d = deckGeo(); for (let k = 0; k < CFG.PLUS5_N; k++) addFx({ kind: 'drop', x: d.x, y: d.y, t0: now() + k * 90, dur: 320 });
+  addFx({ kind: 'peek', id: deckId(s, s.dp), dur: CFG.PEEK_MS, t0: now() + CFG.PLUS5_N * 90 + 200 });
+  goto('game'); G.phase = 'play'; hud(); checkStuck();
+}
+function declinePlus5(){
+  if (G.phase !== 'offer') return;
+  G.offer.taken = false; G.offer.ms = Math.round(now() - G.offer.t); log('event', 'plus5.decline');
+  loseLevel();
+}
+function loseLevel(){
+  G.phase = 'lost'; G.lv.levelMs = Math.round(now() - G.lv.startAt);
+  G.save.metrics[G.li] = summarize(G.lv); save(); Snd.lose();
+  log('event', 'level.lose', 'level=' + (G.li + 1) + ' left=' + G.st.left + ' attempt=' + G.attempt);
+  goto('lost');
+}
+function retryLevel(){ G.attempt++; G.lv.attempts++; startLevel(G.li, true); }
+function winSeq(){
+  const t = now(), s = G.st; G.phase = 'won'; G.phaseUntil = t + CFG.WIN_MS; tip('');
+  const deckLeft = s.deck.length - s.dp, gain = CFG.COIN_WIN + deckLeft * CFG.COIN_PER_DECK;
+  G.lv.levelMs = Math.round(t - G.lv.startAt); G.lv.won = true;
+  addFx({ kind: 'confetti', dur: 1600, seed: G.li * 7 + G.attempt });
+  coins(gain, VW / 2, H * 0.36, 'победа');
+  Snd.win(); buzz([20, 40, 20]);
+  log('event', 'level.win', 'level=' + (G.li + 1) + ' ms=' + G.lv.levelMs + ' attempts=' + G.lv.attempts + ' deckLeft=' + deckLeft);
+}
+function finishLevel(){
+  G.save.metrics[G.li] = summarize(G.lv);
+  G.save.level = Math.max(G.save.level, Math.min(G.li + 1, LEVELS.length)); save();
+  goto('win');
+}
+function summarize(lv){
+  const d = lv.dts.slice().sort((a, b) => a - b), p95 = d.length ? d[Math.min(d.length - 1, Math.floor(d.length * 0.95))] : null;
+  const o = {}; for (const k of ['level', 'mode', 'levelMs', 'attempts', 'won', 'moves', 'draws', 'tumbles', 'wrong', 'closed', 'assist', 'loupes', 'maxStreak',
+    'swipes', 'failBack', 'failEmpty', 'swipeDown', 'accidental', 'fromCube', 'stuckF', 'stuckFT', 'stuckN', 'stuckNT', 'drawWithMove', 'camTry', 'stand']) o[k] = lv[k];
+  o.plus5 = lv.plus5.map(x => ({ left: x.left, attempt: x.attempt, taken: x.taken, ms: x.ms }));
+  o.fps = lv.frameMs ? +(1000 * lv.frames / lv.frameMs).toFixed(1) : null; o.p95ms = p95 === null ? null : +p95.toFixed(1);
+  return o;
+}
+function coins(n, x, y, why){
+  G.save.coins += n; const p = pillPos();
+  addFx({ kind: 'coin', x0: x, y0: y, x1: p.x, y1: p.y, n, dur: 650 });
+  setTimeout(() => { Snd.coin(); hud(); }, 600);
+  log('event', 'coins', '+' + n + ' ' + why);
+}
+
+// ---------------------------------------------------------------------------
+// 2D-слой: лоток (серия, призраки ±1, отбой, колода с открытой верхней, «кубиков осталось»), стрелка урока, рука, эффекты.
+// Всё в canvas (§9).
+// ---------------------------------------------------------------------------
+const uicv = $('ui'), uctx = uicv.getContext('2d');
+const CUR_W = 68, CUR_H = 95, GH_W = 42, GH_H = 59;
+function curGeo(){ const t = trayTop() + (1 - G.trayK) * (TRAY_H + 40); return { x: VW / 2, y: t + 136, w: CUR_W, h: CUR_H, top: t }; }
+function deckGeo(){ const c = curGeo(); return { x: 64, y: c.y, w: 60, h: 84 }; }
+function leftGeo(){ const c = curGeo(); return { x: VW - 64, y: c.y - 6 }; }
+function pillPos(){ const fr = $('frame').getBoundingClientRect(), r = document.querySelector('.pill').getBoundingClientRect(); return { x: (r.left - fr.left + 16) / scale, y: (r.top - fr.top + 16) / scale }; }
+function drawGhost(c, rank, x, y, w, h, pulse){   // призрак ±1: полупрозрачная карта с рангом без масти, пунктир
+  c.save(); c.globalAlpha = 0.55 + 0.15 * pulse;
+  c.fillStyle = 'rgba(255,250,240,.5)'; rr(c, x, y, w, h, w * 0.14); c.fill();
+  c.setLineDash([4, 3]); c.strokeStyle = 'rgba(255,255,255,.95)'; c.lineWidth = 1.5; c.stroke(); c.setLineDash([]);
+  c.globalAlpha = 0.95; c.fillStyle = '#2c2a1c';
+  drawRank(c, RANKS[rank], x + w / 2, y + h * 0.66, Math.round(h * 0.56), w * 0.84, rank === 5 || rank === 8);
+  c.restore();
+}
+function drawMiniCube(c, x, y, s){           // значок «кубик» (три грани)
+  const h = s * 0.5, w = s * 0.866;
+  c.fillStyle = '#fffaf0'; c.beginPath(); c.moveTo(x, y - s); c.lineTo(x + w, y - h); c.lineTo(x, y); c.lineTo(x - w, y - h); c.closePath(); c.fill();
+  c.fillStyle = '#d8ccb0'; c.beginPath(); c.moveTo(x - w, y - h); c.lineTo(x, y); c.lineTo(x, y + s); c.lineTo(x - w, y + h); c.closePath(); c.fill();
+  c.fillStyle = '#3b5594'; c.beginPath(); c.moveTo(x + w, y - h); c.lineTo(x, y); c.lineTo(x, y + s); c.lineTo(x + w, y + h); c.closePath(); c.fill();
+  c.strokeStyle = 'rgba(30,25,15,.6)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x, y - s); c.lineTo(x + w, y - h); c.lineTo(x + w, y + h); c.lineTo(x, y + s); c.lineTo(x - w, y + h); c.lineTo(x - w, y - h); c.closePath(); c.moveTo(x, y); c.lineTo(x, y + s); c.moveTo(x, y); c.lineTo(x - w, y - h); c.moveTo(x, y); c.lineTo(x + w, y - h); c.stroke();
+}
+function drawTray(c, t){
+  const g = curGeo(), top = g.top, s = G.st;
+  const grd = c.createLinearGradient(0, top - 10, 0, H); grd.addColorStop(0, 'rgba(8,22,14,0)'); grd.addColorStop(0.12, 'rgba(8,22,14,.86)'); grd.addColorStop(1, 'rgba(6,16,10,.96)');
+  c.fillStyle = grd; c.fillRect(0, top - 10, VW, H - top + 10);
+  // серия: огоньки
+  const n = 10, on = Math.min(n, s.streak), lx0 = 34, lx1 = VW - 34, ly = top + 12;
+  for (let i = 0; i < n; i++){
+    const x = lx0 + (lx1 - lx0) * (i + 0.5) / n, lit = i < on;
+    c.fillStyle = lit ? '#ffe08a' : 'rgba(255,255,255,.22)';
+    if (lit){ c.shadowColor = '#ffb13d'; c.shadowBlur = 14; }
+    c.beginPath(); c.arc(x, ly, lit ? 5.5 : 4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+  }
+  // подпись над лотком: фишка «серия цела» (эффект chip) > «сверху хода нет» > «серия N»
+  const flying = G.fx.find(f => (f.kind === 'fly' || f.kind === 'deal') && t < f.t0 + f.dur);
+  const shown = flying ? flying.prev : curId(s), sr = shown % 13, noMove = G.phase === 'play' && !busy() && !hasMove(s) && canPay(s);
+  const label = G.fx.some(f => f.kind === 'chip') ? '' : noMove ? 'сверху хода нет' : s.streak >= 3 ? 'серия ' + s.streak : '';
+  if (label){ c.font = '900 13px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = 'rgba(6,16,10,.8)'; c.strokeText(label, VW / 2, top - 8);
+    c.fillStyle = noMove ? '#ffe9b0' : '#ffe08a'; c.fillText(label, VW / 2, top - 8); }
+  // призраки ±1 над отбоем; хода сверху нет — пульсируют ярче (нейтрально: колода или кувырок — решает игрок)
+  const pulse = 0.5 + 0.5 * Math.sin(t / (noMove ? 240 : 380)), gy = top + 25;
+  drawGhost(c, (sr + 12) % 13, g.x - GH_W - 4, gy, GH_W, GH_H, noMove ? 0.6 + 0.4 * pulse : pulse);
+  drawGhost(c, (sr + 1) % 13, g.x + 4, gy, GH_W, GH_H, noMove ? 0.6 + 0.4 * pulse : pulse);
+  // отбой (текущая)
+  c.fillStyle = 'rgba(0,0,0,.35)'; rr(c, g.x - g.w / 2 + 2, g.y - g.h / 2 + 4, g.w, g.h, 9); c.fill();
+  drawCell(c, shown, g.x - g.w / 2, g.y - g.h / 2, g.w, g.h);
+  // колода: рубашки стопкой, верхняя — лицом вверх (видно, что выпадет); при свайпе — горит то, что сгорит
+  const d = deckGeo(), left = s.deck.length - s.dp;
+  const burning = G.fx.find(f => f.kind === 'burn' && t < f.t0 + f.dur && t >= f.t0), peek = G.fx.find(f => f.kind === 'peek' && t < f.t0 + f.dur);
+  const backs = Math.min(4, Math.max(0, left - 1));
+  for (let i = backs; i >= 1; i--) drawCell(c, CELL_BACK, d.x - d.w / 2 - i * 1.6, d.y - d.h / 2 - i * 2, d.w, d.h);
+  if (left > 0){
+    const willBurn = TUM.kind === 'up' && (TUM.mode === 'drag' || TUM.curve === 'fall') && TUM.th > 0.08;
+    if (willBurn){
+      const k = Math.min(1, TUM.th / CFG.TUMBLE_COMMIT), past = TUM.th >= CFG.TUMBLE_COMMIT;
+      c.save(); c.shadowColor = palette().flame; c.shadowBlur = 10 + 16 * k + (past ? 6 * pulse : 0); c.fillStyle = 'rgba(255,138,46,' + (0.2 + 0.35 * k) + ')'; rr(c, d.x - d.w / 2 - 4, d.y - d.h / 2 - 4, d.w + 8, d.h + 8, 11); c.fill(); c.restore();
+    }
+    if (peek && t >= peek.t0){ const q = (t - peek.t0) / peek.dur, sx = Math.max(0.05, Math.abs(Math.cos(q * Math.PI))); c.save(); c.translate(d.x, d.y); c.scale(sx, 1); drawCell(c, q < 0.5 ? CELL_BACK : deckId(s, s.dp), -d.w / 2, -d.h / 2, d.w, d.h); c.restore(); }
+    else if (peek) drawCell(c, CELL_BACK, d.x - d.w / 2, d.y - d.h / 2, d.w, d.h);
+    else drawCell(c, deckId(s, s.dp), d.x - d.w / 2, d.y - d.h / 2, d.w, d.h);
+    if (willBurn && TUM.th >= CFG.TUMBLE_COMMIT * 0.6){ c.fillStyle = '#ffb45c'; c.font = '900 14px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('−1', d.x + d.w / 2 + 2, d.y - d.h / 2 - 6); }
+  } else if (!burning){ c.strokeStyle = 'rgba(255,255,255,.3)'; c.setLineDash([5, 4]); c.lineWidth = 1.5; rr(c, d.x - d.w / 2, d.y - d.h / 2, d.w, d.h, 8); c.stroke(); c.setLineDash([]); }
+  c.fillStyle = 'rgba(8,12,8,.88)'; rr(c, d.x - 18, d.y + d.h / 2 + 3, 36, 20, 10); c.fill();
+  c.fillStyle = '#fff'; c.font = '900 13px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(left), d.x, d.y + d.h / 2 + 13);
+  // справа: сколько кубиков осталось
+  const a = leftGeo(); drawMiniCube(c, a.x, a.y - 6, 17);
+  c.fillStyle = '#fff'; c.font = '900 20px ' + FONT; c.fillText(String(s.left), a.x, a.y + 30);
+  c.fillStyle = '#e9dfc6'; c.font = '800 11px ' + FONT; c.fillText(plural(s.left, 'кубик', 'кубика', 'кубиков'), a.x, a.y + 46);
+}
+function drawHand(c, x, y, t, press){          // рука-подсказка: палец касается точки
+  const k = press === undefined ? 0.5 + 0.5 * Math.sin(t / 220) : press, dy = 6 * k;
+  c.save(); c.translate(x + 6, y + 10 + dy); c.rotate(-0.35);
+  c.fillStyle = '#fff6e6'; c.strokeStyle = '#3a2a18'; c.lineWidth = 2.2;
+  c.beginPath(); c.moveTo(-6, 0); c.lineTo(-6, 26); c.quadraticCurveTo(-18, 22, -16, 34); c.lineTo(-4, 52); c.lineTo(18, 52); c.quadraticCurveTo(26, 40, 24, 26);
+  c.lineTo(24, 20); c.quadraticCurveTo(20, 14, 14, 18); c.quadraticCurveTo(10, 12, 4, 16); c.lineTo(4, 0); c.quadraticCurveTo(-1, -7, -6, 0); c.closePath(); c.fill(); c.stroke();
+  c.restore();
+  if (press === undefined){ c.strokeStyle = 'rgba(255,240,200,' + (0.9 - k * 0.6) + ')'; c.lineWidth = 2.5; c.beginPath(); c.arc(x, y, 10 + k * 10, 0, Math.PI * 2); c.stroke(); }
+}
+// урок кувырка: призрачная стрелка «толкни вверх» от передней грани через верх и рука, которая ведёт свайп
+function lessonOn(){ return G.screen === 'game' && G.phase === 'play' && !busy() && !G.save.tumbled && G.li >= 1 && !hasMove(G.st) && canPay(G.st) && frontMatch(G.st); }
+function drawLesson(c, t){
+  const f = figPoint('front'), tp = figPoint('top'), b = figScreenBox(), x = f.x / scale, y0 = Math.min(b.y1 / scale - 14, f.y / scale + 40), y1 = b.y0 / scale + 18;
+  const k = 0.5 + 0.5 * Math.sin(t / 300);
+  // широкая полупрозрачная стрелка вверх по передней грани и через верх: «эта грань встанет наверх»
+  c.save(); c.globalAlpha = 0.3 + 0.15 * k; c.fillStyle = '#fff4d6';
+  const w = 26, hh = 34; c.beginPath(); c.moveTo(x - w / 2, y0); c.lineTo(x - w / 2, y1 + hh); c.lineTo(x - w * 1.3, y1 + hh); c.lineTo(x, y1); c.lineTo(x + w * 1.3, y1 + hh); c.lineTo(x + w / 2, y1 + hh); c.lineTo(x + w / 2, y0); c.closePath(); c.fill();
+  c.globalAlpha = 0.85; c.strokeStyle = '#fff4d6'; c.lineWidth = 2.5; c.setLineDash([7, 6]); c.stroke(); c.setLineDash([]); c.restore();
+  const ly = Math.max((safeT / scale) + HEADER_H + 10, b.y0 / scale - 16);
+  c.save(); c.font = '900 16px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 5; c.strokeStyle = 'rgba(10,20,12,.9)';
+  c.strokeText('толкни вверх ↑', x, ly); c.fillStyle = '#fff4d6'; c.fillText('толкни вверх ↑', x, ly); c.restore();
+  const q = (t % 1500) / 1500, hy = y0 - (y0 - y1 - 20) * easeIO(Math.min(1, q / 0.7)); if (q < 0.85) drawHand(c, x + 4, hy, t, q < 0.08 ? q / 0.08 : 1);
+}
+function figScreenBox(){                   // экранная рамка фигуры (CSS px)
+  const bb = bboxRest(), m = SC.fig.matrix; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const x of [bb.x0, bb.x1]) for (const y of [bb.y0, bb.y1]) for (const z of [bb.z0, bb.z1]){ const p = toScreen(_bv.set(x, y, z).applyMatrix4(m)); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+  return { x0, x1, y0, y1 };
+}
+function hintTarget(t){                         // рука на 1-м уровне: первый ход сразу, потом после простоя
+  if (G.screen !== 'game' || G.phase !== 'play' || G.li !== 0 || busy() || down) return null;
+  if (t - G.lastInput < (G.firstMoveDone ? CFG.HINT_IDLE_MS : 900)) return null;
+  const pl = playable(G.st), i = pickVisibleTarget(pl, cubeVisible);
+  if (i >= 0){ const p = faceCenter(i, 2); return { x: p.x / scale, y: p.y / scale }; }
+  if (!pl.length && canPay(G.st)){ const d = deckGeo(); return { x: d.x, y: d.y }; }
+  return null;
+}
+function addFx(f){ f.t0 = f.t0 || now(); G.fx.push(f); log('fx.start', f.kind, f.info || ''); }
+function quadPose(Q){                           // центр, ширина, высота и угол карты на экране (виртуальные единицы)
+  const cx = (Q[0].x + Q[1].x + Q[2].x + Q[3].x) / 4 / scale, cy = (Q[0].y + Q[1].y + Q[2].y + Q[3].y) / 4 / scale;
+  return { x: cx, y: cy, w: Math.hypot(Q[1].x - Q[0].x, Q[1].y - Q[0].y) / scale, h: Math.hypot(Q[3].x - Q[0].x, Q[3].y - Q[0].y) / scale, a: Math.atan2(Q[1].y - Q[0].y, Q[1].x - Q[0].x) };
+}
+function drawFx(c, t){
+  G.fx = G.fx.filter(f => {
+    const q = (t - f.t0) / f.dur;
+    if (q >= 1){ log('fx.end', f.kind); return false; }
+    if (q < 0) return true;
+    if (f.kind === 'fly'){                     // карта с верха кубика летит на отбой (с квадрата грани — в карту)
+      const A = f.pose || (f.pose = quadPose(f.quad)), g = curGeo(), B = { x: g.x, y: g.y, w: g.w, h: g.h, a: 0 };
+      const e = easeIO(q), x = A.x + (B.x - A.x) * e, y = A.y + (B.y - A.y) * e - Math.sin(e * Math.PI) * 46;
+      let da = B.a - A.a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      const w = A.w + (B.w - A.w) * e, h = A.h + (B.h - A.h) * e;
+      c.save(); c.translate(x, y); c.rotate(A.a + da * e); drawCell(c, f.id, -w / 2, -h / 2, w, h); c.restore();
+    } else if (f.kind === 'deal'){             // верхняя карта колоды (уже лицом вверх) ложится на отбой
+      const g = curGeo(), e = ease(q), x = f.x0 + (g.x - f.x0) * e, y = f.y0 + (g.y - f.y0) * e - Math.sin(e * Math.PI) * 18;
+      const w = 60 + (g.w - 60) * e, h = 84 + (g.h - 84) * e;
+      c.save(); c.translate(x, y); c.rotate(Math.sin(e * Math.PI) * 0.12); drawCell(c, f.id, -w / 2, -h / 2, w, h); c.restore();
+    } else if (f.kind === 'burn'){             // кувырок оплачен: верхняя карта колоды чернеет, сжимается и уходит искрами
+      const w = 60 * (1 - 0.35 * q), h = 84 * (1 - 0.35 * q), y = f.y - 26 * ease(q);
+      c.save(); c.globalAlpha = 1 - q * q; c.translate(f.x, y); c.rotate(q * 0.3); drawCell(c, f.id, -w / 2, -h / 2, w, h);
+      const gr = c.createLinearGradient(0, h / 2, 0, -h / 2); gr.addColorStop(0, 'rgba(20,10,5,.95)'); gr.addColorStop(Math.min(0.99, q * 1.3), 'rgba(40,15,5,.85)'); gr.addColorStop(Math.min(1, q * 1.3 + 0.01), 'rgba(255,140,40,.55)'); gr.addColorStop(1, 'rgba(255,140,40,0)');
+      c.fillStyle = gr; rr(c, -w / 2 + 3, -h / 2 + 3, w - 6, h - 6, 8); c.fill(); c.restore();
+      const rnd = mulberry32(7);
+      for (let i = 0; i < 14; i++){ const a = rnd() * Math.PI * 2, r = 10 + q * (30 + rnd() * 40), x = f.x + Math.cos(a) * r * 0.7, yy = f.y - 10 - q * (40 + rnd() * 50) + Math.sin(a) * 8;
+        c.fillStyle = 'rgba(255,' + Math.round(150 + rnd() * 80) + ',60,' + (1 - q) + ')'; c.beginPath(); c.arc(x, yy, 2.4 * (1 - q) + 0.6, 0, Math.PI * 2); c.fill(); }
+    } else if (f.kind === 'chip'){             // фишка «серия цела» над огоньками серии
+      const g = curGeo(), y = g.top - 10 - 8 * ease(Math.min(1, q * 4)), a = q < 0.8 ? 1 : (1 - q) / 0.2;
+      c.save(); c.globalAlpha = a; c.font = '900 14px ' + FONT; const w = c.measureText(f.txt).width + 24;
+      c.fillStyle = 'rgba(255,214,110,.96)'; rr(c, VW / 2 - w / 2, y - 14, w, 28, 14); c.fill();
+      c.fillStyle = '#3a2410'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f.txt, VW / 2, y + 1); c.restore();
+    } else if (f.kind === 'drop'){             // «+5»: карта падает в колоду
+      const e = ease(q), y = f.y - 90 * (1 - e);
+      drawCell(c, CELL_BACK, f.x - 30, y - 42, 60, 84);
+    } else if (f.kind === 'coin'){
+      const e = easeIO(q), x = f.x0 + (f.x1 - f.x0) * e, y = f.y0 + (f.y1 - f.y0) * e - Math.sin(e * Math.PI) * 50;
+      const g = c.createRadialGradient(x - 3, y - 3, 1, x, y, 10); g.addColorStop(0, '#ffe39a'); g.addColorStop(0.6, '#f2b233'); g.addColorStop(1, '#c98516');
+      c.fillStyle = g; c.beginPath(); c.arc(x, y, 9, 0, Math.PI * 2); c.fill();
+      if (q < 0.5){ c.font = '900 15px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = 'rgba(20,15,5,.85)'; c.strokeText('+' + f.n, f.x0, f.y0 - 18 - q * 30); c.fillStyle = '#ffe08a'; c.fillText('+' + f.n, f.x0, f.y0 - 18 - q * 30); }
+    } else if (f.kind === 'deny'){             // промах по рангу: красная рамка дрожит
+      const Q = f.quad, k = Math.sin(q * Math.PI * 6) * 3 * (1 - q);
+      c.strokeStyle = 'rgba(255,90,70,' + (1 - q) + ')'; c.lineWidth = 3; c.beginPath();
+      Q.forEach((p, i) => { const x = p.x / scale + k, y = p.y / scale; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); c.stroke();
+    } else if (f.kind === 'confetti'){
+      const rnd = mulberry32(f.seed);
+      for (let i = 0; i < 70; i++){
+        const x = rnd() * VW, sp = 60 + rnd() * 120, y = -20 + q * (H * 0.8) * (0.6 + rnd() * 0.6), cl = ['#f4c542', '#ffe39a', '#e94f4f', '#3fb27f', '#4d8fe0'][i % 5];
+        c.save(); c.translate(x + Math.sin(q * 6 + i) * 14, y); c.rotate(q * sp / 20 + i); c.fillStyle = cl; c.globalAlpha = 1 - q * 0.6;
+        c.beginPath(); c.moveTo(-5, 0); c.lineTo(5, 0); c.lineTo(0, 9); c.closePath(); c.fill(); c.restore();
+      }
+    }
+    return true;
+  });
+}
+function renderUI(t){
+  const c = uctx; c.setTransform(SC.DPR * scale, 0, 0, SC.DPR * scale, 0, 0); c.clearRect(0, 0, VW, H);
+  if (!['game', 'offer', 'win', 'lost'].includes(G.screen) || !G.st) return;
+  if (G.trayK > 0.01) drawTray(c, t);
+  drawFx(c, t);
+  if (lessonOn()){ if (!G.lessonAt){ G.lessonAt = t; log('event', 'lesson.show', 'tumble'); tip('Сверху хода нет — толкни кубик вверх: передняя грань встанет наверх', 0); } drawLesson(c, t); }
+  else if (G.lessonAt){ G.lessonAt = 0; if (!G.save.tumbled) tip(''); }
+  const h = hintTarget(t); if (h) drawHand(c, h.x, h.y, t);
+  if (down && !down.moved && down.hit && !down.loupe){       // кольцо лупы вокруг пальца
+    const ms = t - down.t0; if (ms > CFG.LOUPE_RING_MS){ const k = Math.min(1, (ms - CFG.LOUPE_RING_MS) / (CFG.LOUPE_MS - CFG.LOUPE_RING_MS));
+      c.strokeStyle = 'rgba(255,240,200,.85)'; c.lineWidth = 3; c.beginPath(); c.arc(down.ux, down.uy, 30, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); c.stroke(); }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Экраны: DOM-оверлеи, любой открывается кодом или хешем (§6, §11)
+// ---------------------------------------------------------------------------
+function show(html, cls){ $('overlay').className = 'show' + (cls ? ' ' + cls : ''); $('card').innerHTML = html; }
+function hideCard(){ $('overlay').className = ''; }
+const fmtS = (ms) => (ms === null || ms === undefined ? '—' : (ms / 1000).toFixed(0));
+const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; };
+const cubeSvg = '<svg class="big-cube" viewBox="-50 -50 100 100"><path d="M0-44 38-22 0 0-38-22z" fill="#fffaf0" stroke="#3a2a18" stroke-width="3" stroke-linejoin="round"/><path d="M-38-22 0 0 0 44-38 22z" fill="#d8ccb0" stroke="#3a2a18" stroke-width="3" stroke-linejoin="round"/><path d="M38-22 0 0 0 44 38 22z" fill="#3b5594" stroke="#3a2a18" stroke-width="3" stroke-linejoin="round"/></svg>';
+const modeName = () => gameMode() === 'stand4' ? 'Б: подставка + 4 стороны' : 'А: одна ось';
+function goto(screen){
+  G.screen = screen; log('screen', screen);
+  if (screen === 'game'){ hideCard(); return; }
+  if (screen === 'menu'){
+    const lvl = Math.min(G.save.level, LEVELS.length - 1), done = G.save.level >= LEVELS.length, inLevel = G.st && G.phase === 'play';
+    show(`<h2>Кувырок</h2><p>Кубик из карт. Снимай верх по ±1, а когда хода нет — толкни кубик: передняя грань встанет наверх, серия не рвётся.</p>
+      <div class="mode">Вариант ${modeName()}</div>
+      <div class="row" style="flex-direction:column">
+      ${inLevel ? '<button class="btn primary wide" data-act="resume">Продолжить: уровень ' + (G.li + 1) + '</button>' :
+        `<button class="btn primary wide" data-act="play">${done ? 'Ещё раз с 1-го' : G.save.level ? 'Дальше: уровень ' + (lvl + 1) + ' из ' + LEVELS.length : 'Играть'}</button>`}
+      <button class="btn wide" data-act="results">Итоги теста</button>
+      <button class="btn wide" data-act="help">Как играть</button>
+      <button class="btn wide small" data-act="mode">Сменить вариант (A/B)</button>
+      ${G.save.level ? '<button class="btn wide small" data-act="restart">Начать тест заново</button>' : ''}</div>`);
+  }
+  if (screen === 'help') show(`<h2>Как играть</h2><ul class="help">
+      <li>Снимай открытые кубики — над которыми пусто — на 1 больше или меньше текущей карты: 7 → 6 или 8. K и A — соседи, масть не важна.</li>
+      <li>Нет хода — тапни колоду (новая карта, серия с нуля) или толкни кубик вверх свайпом: передняя грань встанет наверх, текущая карта и серия останутся.</li>
+      <li>И то и другое стоит 1 карту колоды: при кувырке верхняя карта сгорает. Она лежит лицом вверх — видно, что отдаёшь.</li>
+      <li>У открытого кубика карта сверху, у остальных — спереди. Передняя грань встанет наверх после кувырка. Бока и зад — рубашкой.</li>
+      <li>Отпустишь кубик до середины — он откатится назад. Удержи палец на кубике — лупа.</li>
+      <li>Сними все кубики. Осталось 3 или меньше, а колода пуста — можно один раз взять ещё 5 карт.</li></ul>
+      <button class="btn primary wide" data-act="${G.st && G.phase === 'play' ? 'resume' : 'menu'}">Понятно</button>`);
+  if (screen === 'offer'){
+    const o = G.offer;
+    show(`<h2>Так близко!</h2><p>${o.left === 1 ? 'Остался один кубик' : 'Осталось ' + o.left + ' ' + plural(o.left, 'кубик', 'кубика', 'кубиков')}, а колода пуста.</p><div class="row">
+      <button class="btn primary" data-act="plus5">Ещё ${CFG.PLUS5_N} карт</button>
+      <button class="btn" data-act="decline">Сдаться</button></div>`, 'sheet');
+  }
+  if (screen === 'lost'){
+    const left = G.st ? G.st.left : 0;
+    show(`<h2>Колода кончилась</h2><p>${left === 1 ? 'Остался один кубик' : 'Осталось ' + left + ' ' + plural(left, 'кубик', 'кубика', 'кубиков')}. Новая раздача — та же фигура.</p><div class="row">
+      <button class="btn primary" data-act="retry">Заново</button><button class="btn" data-act="menu">Меню</button></div>`, 'sheet');
+  }
+  if (screen === 'win'){
+    const m = G.save.metrics[G.li] || {}, last = G.li >= LEVELS.length - 1;
+    show(`${cubeSvg}<h2>«${LEVELS[G.li].name}» — готово!</h2><p>${last ? 'Все уровни спайка пройдены.' : 'Дальше — ' + LEVELS[G.li + 1].name.toLowerCase() + '.'}</p>
+      <div class="stats"><div>${fmtS(m.levelMs)} с<small>время</small></div><div>${m.tumbles || 0}<small>${plural(m.tumbles || 0, 'кувырок', 'кувырка', 'кувырков')}</small></div><div>${m.maxStreak || 0}<small>лучшая серия</small></div></div>
+      <button class="btn primary wide" data-act="${last ? 'results' : 'next'}">${last ? 'Итоги теста' : 'Дальше'}</button>`);
+  }
+  if (screen === 'results') show(resultsHtml());
+}
+function resultsHtml(){
+  const M = G.save.metrics, rows = [];
+  let n = 0, sw = 0, fb = 0, acc = 0, sf = 0, sft = 0, sn = 0, snt = 0, cam = 0, p5o = 0, p5t = 0, sFps = 0, nFps = 0, worst = 0, tsum = 0;
+  for (let li = 0; li < LEVELS.length; li++){
+    const m = M[li]; if (!m) continue; n++;
+    const fail = m.failBack + m.failEmpty + m.swipeDown, p5 = m.plus5.map(o => (o.taken ? '+' : '−') + o.left).join(' ') || '—';
+    rows.push(`<tr><td>${li + 1}${m.won ? '' : '✗'}</td><td>${fmtS(m.levelMs)}</td><td>${fail}/${m.swipes + m.swipeDown}</td><td>${m.accidental}</td><td>${m.stuckFT}/${m.stuckF}</td><td>${m.stuckNT}/${m.stuckN}</td><td>${m.camTry}</td><td>${p5}</td><td>${m.attempts}</td><td>${m.fps === null ? '—' : Math.round(m.fps)}</td></tr>`);
+    sw += m.swipes + m.swipeDown; fb += fail; acc += m.accidental; sf += m.stuckF; sft += m.stuckFT; sn += m.stuckN; snt += m.stuckNT; cam += m.camTry; tsum += m.levelMs || 0;
+    for (const o of m.plus5){ p5o++; if (o.taken) p5t++; }
+    if (m.fps !== null){ sFps += m.fps; nFps++; } if (m.p95ms) worst = Math.max(worst, m.p95ms);
+  }
+  if (!n) return `<h2>Итоги теста</h2><p>Пока пусто — пройди хотя бы один уровень.</p><button class="btn primary wide" data-act="menu">Меню</button>`;
+  const pc = (a, b) => b ? Math.round(100 * a / b) + '%' : '—';
+  rows.push(`<tr class="tot"><td>Σ</td><td>${fmtS(tsum / n)}</td><td>${pc(fb, sw)}</td><td>${acc}</td><td>${pc(sft, sf)}</td><td>${pc(snt, sn)}</td><td>${cam}</td><td>${p5t}/${p5o}</td><td></td><td>${nFps ? Math.round(sFps / nFps) : '—'}</td></tr>`);
+  const base = LEVELS.slice(2).map(L => L.wn).filter(x => x), bn = base.length ? Math.round(base.reduce((a, b) => a + b, 0) / base.length) : null;
+  return `<h2>Итоги теста</h2><div class="mode">Вариант ${modeName()}</div><table class="res"><tr><th>ур.</th><th>время, с</th><th>свайп неуд./ всего</th><th>случ. кувыр.</th><th>застрял, ±1 спер.: толкнул</th><th>застрял, нет ±1: толкнул</th><th>кру- тил кам.</th><th>«+5»</th><th>по- пыт.</th><th>к/с</th></tr>${rows.join('')}</table>
+    <div class="goal">Цели плана: неудачных свайпов ≤ 5% (провал — больше 15%); где спереди есть ±1, толкают ≥ 70%, где нет — ≤ 15%.
+    «Неуд.» — отпустил до середины, свайп вниз или при пустой колоде; «случ.» — кувырок, когда сверху был ход. «Крутил кам.» — свайп вбок.
+    «+5»: + взял, − отказался, цифра — кубиков на поле. ✗ — уровень не пройден. Простой бот сима выигрывает ~${bn ?? '—'}% на уровнях 3+. Худшие 5% кадров: ${worst ? worst.toFixed(0) + ' мс' : '—'}.
+    Спросить вслух: «какая грань встанет, если толкнуть?» (цель — ≥ 90% к 3-му уровню).</div>
+    <div class="row"><button class="btn primary" data-act="copy">Скопировать JSON</button><button class="btn" data-act="menu">Меню</button></div>`;
+}
+$('card').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const act = b.dataset.act; Snd.init(); log('input', 'button', act);
+  if (act === 'play'){ if (G.save.level >= LEVELS.length) G.save.level = 0; startLevel(G.save.level); }
+  else if (act === 'next') startLevel(G.li + 1);
+  else if (act === 'help') goto('help');
+  else if (act === 'results') goto('results');
+  else if (act === 'menu') goto('menu');
+  else if (act === 'resume') goto(G.phase === 'offer' ? 'offer' : 'game');
+  else if (act === 'restart'){ resetProgress(); goto('menu'); }
+  else if (act === 'mode'){ G.save.mode = gameMode() === 'stand4' ? 'axis1' : 'stand4'; save(); log('event', 'mode', G.save.mode); if (G.st && G.phase === 'play') G.phase = 'idle'; goto('menu'); toast('Вариант ' + modeName()); }
+  else if (act === 'plus5') takePlus5();
+  else if (act === 'decline') declinePlus5();
+  else if (act === 'retry') retryLevel();
+  else if (act === 'copy'){ const txt = JSON.stringify({ game: 'kuvyrok', at: new Date().toISOString(), mode: gameMode(), metrics: G.save.metrics }, null, 1);
+    try { navigator.clipboard.writeText(txt).then(() => toast('Скопировано'), () => toast('Не удалось скопировать')); } catch (err) { toast('Не удалось скопировать'); } }
+});
+function resetProgress(){ G.save.level = 0; G.save.metrics = {}; G.save.coins = CFG.COINS_START; G.save.tumbled = false; save(); G.phase = 'idle'; log('event', 'reset'); }
+function routeHash(h){
+  const m = /^level=(\d+)$/.exec(h);
+  if (m) startLevel(+m[1] - 1);
+  else if (h === 'game') startLevel(Math.min(G.save.level, LEVELS.length - 1));
+  else if (h === 'win'){ if (!G.st) startLevel(0); G.phase = 'idle'; goto('win'); }
+  else if (h === 'offer'){ if (!G.st) startLevel(2); G.offer = { left: 2, attempt: 0, taken: null, t: now() }; G.phase = 'offer'; goto('offer'); }
+  else if (h === 'lost'){ if (!G.st) startLevel(2); G.phase = 'lost'; goto('lost'); }
+  else if (['menu', 'help', 'results'].includes(h)) goto(h);
+  else goto('menu');
+}
+window.addEventListener('hashchange', () => routeHash(location.hash.slice(1)));
+let toastUntil = 0;
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.remove('hide'); toastUntil = now() + CFG.TOAST_MS; }
+function tip(txt, ms){ $('tip').textContent = txt || ''; G.tipUntil = ms ? now() + ms : 0; }
+function hud(){
+  $('hud-coins').textContent = G.save.coins;
+  const inGame = G.st && G.screen !== 'menu';
+  $('hud-title').textContent = inGame ? 'Уровень ' + (G.li + 1) + ' из ' + LEVELS.length : 'Кувырок';
+  $('hud-sub').textContent = inGame ? LEVELS[G.li].name + ' · ' + G.st.g.n + ' ' + plural(G.st.g.n, 'карта', 'карты', 'карт') : 'кубик из карт';
+  $('mute-wave').style.display = G.save.muted ? 'none' : ''; $('mute-x').style.display = G.save.muted ? '' : 'none';
+}
+$('btn-menu').onclick = () => { Snd.init(); log('input', 'button', 'menu'); goto(G.screen === 'menu' ? (G.st && G.phase !== 'idle' ? (G.phase === 'offer' ? 'offer' : G.phase === 'lost' ? 'lost' : 'game') : 'menu') : 'menu'); };
+$('btn-mute').onclick = () => { Snd.init(); G.save.muted = !G.save.muted; save(); hud(); log('input', 'button', 'mute=' + G.save.muted); };
+
+// ---------------------------------------------------------------------------
+// Ввод: Pointer Events, порог TAP_SLOP 10 px, pointercancel = pointerup (§3). Тап по кубику — ход; свайп вверх — кувырок
+// вслед за пальцем; вниз и вбок — резинка (вбок при подставке — поворот); удержание — лупа.
+// ---------------------------------------------------------------------------
+const gameEl = $('game');
+let down = null;
+const touches = new Set();
+function local(e){ const r = $('gl').getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function inTray(p){ return G.trayK > 0.5 && p.y / scale > curGeo().top - 6; }
+function inRect(p, g, pad){ const x = p.x / scale, y = p.y / scale; return Math.abs(x - g.x) <= g.w / 2 + pad && Math.abs(y - g.y) <= g.h / 2 + pad; }
+gameEl.addEventListener('pointerdown', (e) => {
+  Snd.init(); touched = true; G.lastInput = now();
+  touches.add(e.pointerId);
+  try { gameEl.setPointerCapture(e.pointerId); } catch (err) {}
+  if (touches.size > 1){ if (down && !down.moved){ down = null; hideLoupe(); } return; }   // второй палец — без жестов
+  const p = local(e), tray = inTray(p);
+  down = { id: e.pointerId, x: e.clientX, y: e.clientY, t0: now(), te: e.timeStamp || now(), moved: false, kind: '', tray, loupe: false,
+    hit: !tray && G.screen === 'game' && G.phase === 'play' && !busy() ? pickCube(p.x, p.y) : null, ux: p.x / scale, uy: p.y / scale, ly: e.clientY, lx: e.clientX, lt: e.timeStamp || now(), v: 0 };
+});
+gameEl.addEventListener('pointermove', (e) => {
+  if (!down || e.pointerId !== down.id) return;
+  if (!down.moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) > CFG.TAP_SLOP_PX){
+    down.moved = true; hideLoupe();
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    if (!down.tray && G.screen === 'game' && G.phase === 'play' && !busy()){
+      down.kind = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 'up' : 'down') : 'yaw';
+      if (down.kind === 'up' && down.hit && isOpen(G.st, down.hit.i) && ok(G.st.cur, G.st.rank[down.hit.i])) G.lv.fromCube++;   // свайп начат с подходящего кубика
+      startDrag(down.kind);
+    } else down.kind = 'none';
+  }
+  if (!down.moved || down.kind === 'none' || TUM.mode !== 'drag') return;
+  const te = e.timeStamp || now(), dt = Math.max(1, te - down.lt);
+  if (down.kind === 'yaw'){ const raw = (e.clientX - down.x) / CFG.YAW_PX; down.v = down.v * 0.5 + ((e.clientX - down.lx) / CFG.YAW_PX / dt * 1000) * 0.5; dragTo(raw, down.v); }
+  else { const raw = (down.kind === 'up' ? down.y - e.clientY : e.clientY - down.y) / CFG.TUMBLE_PX; down.v = down.v * 0.5 + ((down.ly - e.clientY) / CFG.TUMBLE_PX / dt * 1000) * 0.5; dragTo(raw, down.v); }
+  down.lx = e.clientX; down.ly = e.clientY; down.lt = te;
+});
+function onUp(e){
+  touches.delete(e.pointerId);
+  if (!down || e.pointerId !== down.id) return;
+  const d = down; down = null;
+  const held = (e.timeStamp || now()) - d.te;
+  if (d.moved){ if (d.kind && d.kind !== 'none' && TUM.mode === 'drag') releaseDrag(e.type === 'pointercancel', held); return; }
+  // граница одна — по времени самих событий (урок tap-hold-gap): отпустил раньше LOUPE_MS = тап, даже если занятый кадр
+  // успел показать лупу; позже — лупа, не ход
+  if (d.loupe){ hideLoupe(); if (held >= CFG.LOUPE_MS){ log('input', 'loupe.release', 'ms=' + Math.round(held)); return; } G.lv.loupes--; }
+  if (e.type === 'pointercancel') return;
+  tapAt(local(e), d);
+}
+gameEl.addEventListener('pointerup', onUp); gameEl.addEventListener('pointercancel', onUp);
+function tapAt(p, d){
+  if (G.screen !== 'game' || G.phase !== 'play' || busy()) return;
+  if (inTray(p)){ if (inRect(p, deckGeo(), 12)) deckTap(); return; }
+  const hit = pickCube(p.x, p.y);
+  if (hit && isOpen(G.st, hit.i)){ playCube(hit.i, 'direct'); return; }
+  // помощь: рядом с центром верха подходящего кубика
+  let best = -1, bd = CFG.ASSIST_PX;
+  for (const i of playable(G.st)){ const c = faceCenter(i, 2), dd = Math.hypot(c.x - p.x, c.y - p.y); if (dd < bd){ bd = dd; best = i; } }
+  if (best >= 0){ G.lv.assist++; playCube(best, 'assist'); return; }
+  if (hit){ playCube(hit.i, 'direct'); return; }      // закрытый — отказ с дрожью
+  log('input', 'tap.empty');
+}
+function showLoupe(hit, d){
+  const s = G.st, i = hit.i, c = $('loupe-cv').getContext('2d');
+  const faceShown = stickerCell(s, i, 2) !== CELL_BACK || stickerCell(s, i, 4) !== CELL_BACK || (!s.axis1);
+  const cell = faceShown ? cubeId(s, i) : CELL_BACK;
+  const txt = !faceShown ? 'ранг не виден' : !isOpen(s, i) ? 'закрыт — сверху кубик' : ok(s.cur, s.rank[i]) ? 'можно снять' : 'не подходит';
+  c.clearRect(0, 0, 144, 202); c.drawImage(SC.cards, (cell % C_COLS) * CELL_W, Math.floor(cell / C_COLS) * CELL_H, CELL_W, CELL_H, 0, 0, 144, 202);
+  $('loupe-txt').textContent = txt;
+  const el = $('loupe'), fr = $('frame').getBoundingClientRect(), x = d.x - fr.left, y = d.y - fr.top;
+  el.classList.add('on'); const w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(8, Math.min(fr.width - w - 8, x - w / 2)) + 'px'; el.style.top = Math.max(8, y - h - 44) + 'px';
+  G.lv.loupes++; log('input', 'loupe', txt);
+}
+function hideLoupe(){ $('loupe').classList.remove('on'); }
+document.addEventListener('keydown', (e) => {          // дубли на клавиатуру для отладки (§3)
+  if (e.key === 'd') deckTap();
+  if (e.key === 'ArrowUp' || e.key === 't') autoTumble();
+  if (e.key === 'b') KUVYROK.bot();
+  if (e.key === 'r' && G.st) startLevel(G.li);
+  if (e.key === 'm') goto('menu');
+});
+
+// ---------------------------------------------------------------------------
+// Размер: resize + orientationchange + периодический пересчёт (§2)
+// ---------------------------------------------------------------------------
+function fit(){
+  const r = $('game').getBoundingClientRect(); if (!r.width || !r.height) return;
+  const fs = getComputedStyle($('frame'));
+  safeT = parseFloat(fs.paddingTop) || 0; safeB = parseFloat(fs.paddingBottom) || 0;
+  SC.DPR = Math.min(window.devicePixelRatio || 1, 2); SC.cssW = r.width; SC.cssH = r.height;
+  scale = r.width / VW; H = r.height / scale;
+  uicv.width = Math.round(r.width * SC.DPR); uicv.height = Math.round(r.height * SC.DPR);
+  if (SC.renderer){ SC.renderer.setPixelRatio(SC.DPR); SC.renderer.setSize(r.width, r.height, false); SC.camera.aspect = r.width / r.height; SC.camera.updateProjectionMatrix(); }
+  document.documentElement.style.setProperty('--tray-h', Math.round(TRAY_H * scale) + 'px');
+  if (G.st && SC.rest && !busy()){ Object.assign(CAM, frameFor()); camTw = null; }
+}
+let fitTimer = 0, lastSize = '';
+const refit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 140); };
+window.addEventListener('resize', refit); window.addEventListener('orientationchange', refit);
+setInterval(() => { const r = $('game').getBoundingClientRect(), k = r.width + 'x' + r.height; if (k !== lastSize){ lastSize = k; fit(); } }, 800);
+document.addEventListener('visibilitychange', () => { G.paused = document.hidden; log('event', G.paused ? 'pause' : 'resume'); });
+
+// ---------------------------------------------------------------------------
+// Кадр: rAF + сторож setInterval; безопасно, потому что время абсолютное (§4). Кадр под try/catch.
+// ---------------------------------------------------------------------------
+let lastFrame = 0, lastRaf = 0;
+const fpsRing = [];
+function tick(t, fromRaf){
+  if (!SC.ok) return;
+  if (G.st && SC.rest){
+    updateTum(t);
+    figMatrix(t); riseTargets(); updateInstances(t); placeShadow();
+  }
+  placeCamera(t);
+  SC.renderer.render(SC.scene, SC.camera);
+  if (G.phase === 'stuck' && t >= G.phaseUntil){ if (!G.plus5Used && G.st.left <= CFG.NEAR) offerPlus5(); else loseLevel(); }
+  if (G.phase === 'won' && t >= G.phaseUntil){ G.phase = 'idle'; finishLevel(); }
+  if (down && !down.moved && down.hit && !down.loupe && t - down.t0 >= CFG.LOUPE_MS){ down.loupe = true; showLoupe(down.hit, down); }
+  if (G.tipUntil && t > G.tipUntil){ tip(''); }
+  if (toastUntil && t > toastUntil){ $('toast').classList.add('hide'); toastUntil = 0; }
+  renderUI(t);
+  if (fromRaf){                                 // к/с: только кадры rAF на игровом поле
+    const dt = t - lastRaf; lastRaf = t;
+    if (dt > 0 && dt < 250){
+      fpsRing.push(dt); if (fpsRing.length > 240) fpsRing.shift();
+      if (G.lv && G.screen === 'game' && (G.phase === 'play' || G.phase === 'stuck')){ G.lv.frames++; G.lv.frameMs += dt; if (G.lv.dts.length < 4000) G.lv.dts.push(dt); }
+    }
+  }
+}
+function safeTick(t, fromRaf){ try { tick(t, fromRaf); } catch (err) { if (G.errors.length < 20) G.errors.push(String(err && err.stack || err)); console.error(err); } }
+function frame(){ const t = now(); lastFrame = t; if (!G.paused) safeTick(t, true); requestAnimationFrame(frame); }
+setInterval(() => { const t = now(); if (t - lastFrame > 120 && !G.paused){ lastFrame = t; safeTick(t, false); } }, 40);
+
+// ---------------------------------------------------------------------------
+// Дебаг-хук (§6): состояние, любой экран, прогон времени, бот, точки для проверки касаниями
+// ---------------------------------------------------------------------------
+function botAction(bot){                       // решение бота ядра для текущей позиции: кубик ≥ 0, DRAW или кувырок
+  const s = G.st, open = openList(s), pl = open.filter(i => ok(s.cur, s.rank[i]));
+  return decide(s, bot || 'naiveP', open, pl, mulberry32(G.lv.moves * 31 + G.lv.draws * 7 + G.lv.tumbles + 1), levelCfg(G.li, gameMode()));
+}
+window.KUVYROK = {
+  G, CFG, CAM, SC, TUM, LEVELS,
+  state(){
+    const s = G.st;
+    return { screen: G.screen, phase: G.phase, level: G.li + 1, attempt: G.attempt, mode: gameMode(), cur: s ? RANKS[s.cur] : null, deck: s ? s.deck.length - s.dp : null,
+      deckTop: s && canPay(s) ? RANKS[s.deck[s.dp]] : null, left: s ? s.left : null, open: s ? openList(s).length : null, playable: s ? playable(s).length : null,
+      frontMatch: s ? frontMatch(s) : null, streak: s ? s.streak : 0, up: s ? s.up : null, front: s ? s.front : null, tum: TUM.mode, win: s ? isWin(s) : false,
+      coins: G.save.coins, errors: G.errors.length, camBusy: !!camTw };
+  },
+  play(n){ startLevel((n || 1) - 1); return this.state(); },
+  tap(i){ playCube(i, 'hook'); return this.state(); },
+  deck(){ deckTap(); return this.state(); },
+  tumble(){ autoTumble(); return this.state(); },
+  stand(dir){ if (gameMode() === 'stand4' && !busy()){ animTo('yaw', dir > 0 ? 1 : -1, 200, () => landStand(dir > 0 ? 1 : -1)); TUM.kind = 'yaw'; } return this.state(); },
+  bot(name){                                       // один ход простого бота (naiveP) или указанного
+    if (G.phase === 'offer'){ takePlus5(); return 'plus5'; }
+    if (G.phase !== 'play' || busy()) return G.phase;
+    const a = botAction(name);
+    if (a >= 0){ playCube(a, 'bot'); return a; }
+    if (a === DRAW){ deckTap(); return 'draw'; }
+    const u = T0 - a, s = G.st;
+    if (u !== s.front){ let dir = 1; const X = dirIndex(cross3(DIRS[s.up], DIRS[s.front])); if (u === X) dir = -1; this.stand(dir); return 'stand'; }
+    autoTumble(); return 'tumble';
+  },
+  auto(ms){ clearInterval(this._auto); this._auto = setInterval(() => { if (G.phase === 'idle' || G.screen === 'win' || G.screen === 'lost') clearInterval(this._auto); else this.bot(); }, ms || 350); return 'auto'; },
+  plus5(take){ take === false ? declinePlus5() : takePlus5(); return this.state(); },
+  goto(s){ goto(s); return G.screen; },
+  drive(sec){ const end = now() + sec * 1000; let n = 0; while (now() < end && n < 100000){ safeTick(now(), false); n++; } return this.state(); },
+  settle(){ if (TUM.mode === 'anim'){ TUM.t0 = -1e9; updateTum(now()); } if (camTw){ camTw.t0 = -1e9; } G.phaseUntil = Math.min(G.phaseUntil, now()); safeTick(now(), false); return this.state(); },
+  metrics(){ return { current: G.lv ? summarize(G.lv) : null, saved: G.save.metrics }; },
+  fps(){ if (!fpsRing.length) return null; const a = fpsRing.slice().sort((x, y) => x - y), avg = a.reduce((s, x) => s + x, 0) / a.length;
+    return { fps: +(1000 / avg).toFixed(1), avgMs: +avg.toFixed(2), p95Ms: +a[Math.floor(a.length * 0.95)].toFixed(2), frames: a.length }; },
+  // экранные точки (client px) для проверки настоящими касаниями
+  point(kind){
+    const r = $('gl').getBoundingClientRect(), out = (x, y) => ({ x: Math.round(r.left + x), y: Math.round(r.top + y) });
+    if (kind === 'deck'){ const d = deckGeo(); return out(d.x * scale, d.y * scale); }
+    if (kind === 'move' && G.st && G.phase === 'play'){
+      const a = botAction('naiveP'), s = G.st;
+      if (a === DRAW){ const d = deckGeo(); return { ...out(d.x * scale, d.y * scale), act: 'deck' }; }
+      if (a < 0 && a !== DRAW){ if (T0 - a !== s.front) return { act: 'stand' }; const f = figPoint('front'); return { ...out(f.x, f.y), act: 'swipe', dy: -Math.round(CFG.TUMBLE_PX * 0.85) }; }
+      const pl = [a, ...playable(s).filter(x => x !== a)], v = pickVisibleTarget(pl, cubeVisible);
+      if (v < 0) return null; const c = faceCenter(v, 2); return { ...out(c.x, c.y), act: 'cube', cube: v };
+    }
+    if (kind === 'closed' && G.st){ for (let i = 0; i < G.st.g.n; i++) if (G.st.alive[i] && !isOpen(G.st, i)){ const k = stickerCell(G.st, i, 4) !== CELL_BACK ? 4 : 2, c = faceCenter(i, k), h = pickCube(c.x, c.y); if (h && h.i === i) return { ...out(c.x, c.y), cube: i }; } return null; }
+    const b = document.querySelector('[data-act="' + kind + '"]'); if (b){ const br = b.getBoundingClientRect(); return { x: Math.round(br.left + br.width / 2), y: Math.round(br.top + br.height / 2) }; }
+    return null;
+  },
+  // размер граней на экране, CSS px: сторона наклейки верха открытых и передних граней (мин / среднее)
+  facePx(){ if (!G.st) return null; const s = G.st, top = [], fr = [];
+    for (let i = 0; i < s.g.n; i++){ if (!s.alive[i]) continue; const k2 = isOpen(s, i), k4 = s.blk[s.front * s.g.n + i] === 0;
+      const side = (Q) => (Math.hypot(Q[1].x - Q[0].x, Q[1].y - Q[0].y) + Math.hypot(Q[3].x - Q[0].x, Q[3].y - Q[0].y)) / 2 / 0.88;   // наклейка — 0,88 грани
+      if (k2) top.push(side(faceQuad(i, 2))); if (k4) fr.push(side(faceQuad(i, 4))); }
+    const avg = (a) => a.length ? +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(1) : null, mn = (a) => a.length ? +Math.min(...a).toFixed(1) : null;
+    return { top: avg(top), topMin: mn(top), front: avg(fr), frontMin: mn(fr), rankPx: avg(top) ? +(avg(top) * 0.88 * 0.66).toFixed(1) : null }; },
+  vis(){ if (!G.st) return null; return openList(G.st).map(i => ({ i, rank: RANKS[G.st.rank[i]], fit: ok(G.st.cur, G.st.rank[i]), visible: cubeVisible(i), ...faceCenter(i, 2) })); },
+  reset(){ try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); },
+};
+
+// ---------------------------------------------------------------------------
+// Старт: шрифт → атласы → сцена → прогрев отрисовкой (все наклейки и тела в кадре до первого хода)
+// ---------------------------------------------------------------------------
+async function boot(){
+  const t0 = now();
+  try { await Promise.race([document.fonts.load('900 100px Nunito'), new Promise(r => setTimeout(r, 1500))]); } catch (e) {}
+  fit(); initScene(); fit();
+  // прогрев: собрать самый большой уровень и нарисовать кадр — шейдеры, буферы, атлас готовы до первого хода
+  let big = 0; LEVELS.forEach((L, i) => { if (levelGeo(i).n > levelGeo(big).n) big = i; });
+  G.st = dealLevel(big, 0, gameMode()); SC.rest = restPose(G.st); resetVisual(); G.quietFlip = true; figMatrix(now()); updateInstances(now()); Object.assign(CAM, frameFor()); placeCamera(now());
+  SC.renderer.render(SC.scene, SC.camera);
+  G.st = null; SC.rest = null; G.phase = 'idle';
+  $('loading').remove(); hud();
+  const h = location.hash.slice(1); routeHash(h || 'menu');
+  if (!G.st){                                   // за меню — кубик текущего уровня
+    const li = Math.min(G.save.level, LEVELS.length - 1); G.li = li; G.st = dealLevel(li, 0, gameMode()); SC.rest = restPose(G.st); resetVisual(); G.quietFlip = true; figMatrix(now()); Object.assign(CAM, frameFor()); G.trayK = 0;
+  }
+  requestAnimationFrame(frame);
+  log('event', 'boot', 'levels=' + LEVELS.length + ' total=' + Math.round(now() - t0) + 'ms');
+}
+setTimeout(boot, 20);
+}
+</script>
+</body>
+</html>
